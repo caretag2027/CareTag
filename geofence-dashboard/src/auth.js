@@ -19,12 +19,23 @@ const SESSION_KEY = 'caretag.session';
 
 // ── Password hashing fallback (SHA-256) ──
 async function hashPassword(password) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(`caretag-salt-2026:${password}`);
-  const hash = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hash))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+  try {
+    const scope = typeof window !== 'undefined' ? window : (typeof global !== 'undefined' ? global : {});
+    const Encoder = typeof TextEncoder !== 'undefined' ? TextEncoder : scope.TextEncoder;
+    if (!Encoder) return `hash_${password}`;
+    const encoder = new Encoder();
+    const data = encoder.encode(`caretag-salt-2026:${password}`);
+    const subtle = (typeof crypto !== 'undefined' && crypto?.subtle)
+      ? crypto.subtle
+      : scope.crypto?.subtle;
+    if (!subtle) return `hash_${password}`;
+    const hash = await subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hash))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+  } catch {
+    return `hash_${password}`;
+  }
 }
 
 function generateId() {
@@ -129,15 +140,88 @@ export async function register(name, email, password, role = 'guardian', deviceK
   return { ok: true, user: session };
 }
 
+// ── Dedicated Preconfigured Institutional Accounts ──
+export const DEDICATED_ACCOUNTS = [
+  {
+    id: 'usr_singla_be23',
+    name: 'Bhavishya Singla',
+    email: 'singla_be23@thapar.edu',
+    displayEmail: 'Singla_BE23@thapar.edu',
+    role: 'admin',
+    deviceKey: 'CARE-TAG-01',
+    password: '12345',
+    department: 'Computer Engineering (BE23)',
+    institution: 'Thapar Institute of Engineering & Technology',
+    isPrimary: true,
+  },
+  {
+    id: 'usr_dr_sharma',
+    name: 'Dr. Rajesh Sharma',
+    email: 'dr.sharma@thapar.edu',
+    displayEmail: 'dr.sharma@thapar.edu',
+    role: 'caregiver',
+    deviceKey: 'CARE-TAG-02',
+    password: '12345',
+    department: 'Health & Clinical Center',
+    institution: 'Thapar Institute of Engineering & Technology',
+  },
+  {
+    id: 'usr_nurse_ananya',
+    name: 'Ananya Verma, RN',
+    email: 'nurse.ananya@thapar.edu',
+    displayEmail: 'nurse.ananya@thapar.edu',
+    role: 'caregiver',
+    deviceKey: 'CARE-TAG-03',
+    password: '12345',
+    department: 'Elderly & Pediatric Care Unit',
+    institution: 'Thapar Institute of Engineering & Technology',
+  },
+  {
+    id: 'usr_warden_safety',
+    name: 'Campus Safety Control',
+    email: 'warden.safety@thapar.edu',
+    displayEmail: 'warden.safety@thapar.edu',
+    role: 'admin',
+    deviceKey: 'CARE-TAG-04',
+    password: '12345',
+    department: 'Campus Security & Geofence Dispatch',
+    institution: 'Thapar Institute of Engineering & Technology',
+  },
+  {
+    id: 'usr_parent_guardian',
+    name: 'Priya Singla',
+    email: 'parent.guardian@thapar.edu',
+    displayEmail: 'parent.guardian@thapar.edu',
+    role: 'guardian',
+    deviceKey: 'CARE-TAG-05',
+    password: '12345',
+    department: 'Family Guardian Network',
+    institution: 'Thapar Institute of Engineering & Technology',
+  },
+];
+
+/**
+ * Normalizes email or login ID input to be forgiving of whitespace,
+ * casing, and common speech-to-text / copy-paste patterns like 'at the rate'.
+ */
+export function normalizeEmail(email) {
+  if (!email) return '';
+  return email
+    .trim()
+    .toLowerCase()
+    .replace(/\s*at\s+the\s+rate\s*/gi, '@')
+    .replace(/\s+/g, '');
+}
+
 /**
  * Login with email and password.
- * Checks Cloudflare Worker backend first, falls back to local accounts.
+ * Checks Cloudflare Worker backend first, falls back to dedicated institutional accounts.
  */
 export async function login(email, password) {
-  if (!email?.trim()) return { ok: false, error: 'Email is required' };
+  if (!email?.trim()) return { ok: false, error: 'Login ID / Email is required' };
   if (!password) return { ok: false, error: 'Password is required' };
 
-  const normalizedEmail = email.trim().toLowerCase();
+  const normalizedEmail = normalizeEmail(email);
 
   // Try Cloudflare Worker backend
   try {
@@ -154,7 +238,7 @@ export async function login(email, password) {
           userId: data.user.userId || data.user.id,
           name: data.user.name,
           email: data.user.email,
-          role: data.user.role || 'guardian',
+          role: data.user.role || 'admin',
           deviceKey: data.user.deviceKey || 'CARE-TAG-01',
           token: data.token,
           backend: 'cloudflare-worker',
@@ -164,48 +248,57 @@ export async function login(email, password) {
       }
     } else {
       const errData = await res.json().catch(() => ({}));
-      // If server explicitly rejected password, return error
       if (res.status === 401) {
         return { ok: false, error: errData.error || 'Invalid email or password' };
       }
     }
   } catch (e) {
-    // Network error — fall back to local accounts
+    // Network error — fall back to dedicated local accounts
+  }
+
+  // Fallback: Check Dedicated Preconfigured Accounts
+  const dedicated = DEDICATED_ACCOUNTS.find(
+    acc => acc.email === normalizedEmail || normalizeEmail(acc.displayEmail) === normalizedEmail
+  );
+
+  if (dedicated) {
+    if (password === dedicated.password) {
+      const session = {
+        userId: dedicated.id,
+        name: dedicated.name,
+        email: dedicated.email,
+        role: dedicated.role,
+        deviceKey: dedicated.deviceKey,
+        department: dedicated.department,
+        institution: dedicated.institution,
+        backend: 'dedicated-account',
+      };
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      return { ok: true, user: session };
+    } else {
+      return { ok: false, error: 'Incorrect password for this institutional account' };
+    }
   }
 
   // Fallback: Check local storage
   const localUsers = loadLocalUsers();
   const passwordHash = await hashPassword(password);
-  const found = localUsers.find(u => u.email === normalizedEmail && u.passwordHash === passwordHash);
+  const found = localUsers.find(u => normalizeEmail(u.email) === normalizedEmail && u.passwordHash === passwordHash);
 
-  if (!found) {
-    // Built-in demo accounts in local mode
-    if (normalizedEmail === 'demo@caretag.io' && password === 'caretag2026') {
-      const session = {
-        userId: 'usr_demo_guardian',
-        name: 'Dr. Sarah Jenkins',
-        email: 'demo@caretag.io',
-        role: 'guardian',
-        deviceKey: 'CARE-TAG-01',
-        backend: 'local-demo',
-      };
-      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-      return { ok: true, user: session };
-    }
-    return { ok: false, error: 'Invalid email or password' };
+  if (found) {
+    const session = {
+      userId: found.id,
+      name: found.name,
+      email: found.email,
+      role: found.role || 'guardian',
+      deviceKey: found.deviceKey || 'CARE-TAG-01',
+      backend: 'local-fallback',
+    };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    return { ok: true, user: session };
   }
 
-  const session = {
-    userId: found.id,
-    name: found.name,
-    email: found.email,
-    role: found.role || 'guardian',
-    deviceKey: found.deviceKey || 'CARE-TAG-01',
-    backend: 'local-fallback',
-  };
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-
-  return { ok: true, user: session };
+  return { ok: false, error: 'Unrecognized Login ID. Please check your assigned institutional credentials.' };
 }
 
 /**

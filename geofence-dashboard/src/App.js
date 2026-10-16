@@ -1,23 +1,41 @@
 import {
-  AlertTriangle, Battery, BatteryLow, Bell, CheckCircle, ChevronRight,
-  Crosshair, LogOut, MapPin, PanelRightClose, PanelRightOpen, Play, Pause,
-  Shield, ShieldAlert, ShieldCheck, Trash2, TrendingDown, TrendingUp,
-  User, Volume2, VolumeX, Wifi, WifiOff, X, Radio, Zap, BarChart3, Clock, Eye,
-  EyeOff, Cloud, Sparkles, ArrowRight, Activity
+  AlertTriangle, Bell, CheckCircle,
+  Crosshair, LogOut, MapPin,
+  Shield, ShieldCheck,
+  Radio, Clock, Eye,
+  EyeOff, ArrowRight,
+  Mail, Lock, ArrowLeft, Check, Terminal, Sliders, Maximize2, Minimize2,
+  Navigation
 } from 'lucide-react';
 import {
-  Circle, MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents
+  Circle, MapContainer, Marker, Popup, TileLayer, useMap, Polyline, useMapEvents
 } from 'react-leaflet';
 import L from 'leaflet';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import api from './api';
-import simulation from './simulation';
-import { startSignalR, stopSignalR } from './signalr';
+import simulation, { SCENARIO_PRESETS } from './simulation';
 import auth from './auth';
 import alertStore from './alertStore';
-import voiceAlarm from './voiceAlarm';
-import batteryStore from './batteryStore';
-import progressStore from './progressStore';
+import CareTagLogo from './components/CareTagLogo';
+import LandingPage from './components/LandingPage';
+import TaggyChatbot from './components/TaggyChatbot';
+import CookieBanner from './components/CookieBanner';
+import {
+  subscribeHardwareTelemetry,
+  saveRoutineObservationToFirebase,
+  fetchRoutineHistoryFromFirebase,
+  fetchRoutineProfileFromFirebase
+} from './firebase';
+import FirstTimeSetupWizard from './components/FirstTimeSetupWizard';
+import CaregiverOverview from './components/CaregiverOverview';
+import TechnicalInspector from './components/TechnicalInspector';
+import SafeZoneManager from './components/SafeZoneManager';
+import {
+  getDeviceStatusMeta,
+  DEVICE_STATUS,
+  isScheduleActive,
+  evaluateSafetyState
+} from './utils/dashboardUtils';
 
 /* ──────────────────────────────────────────────────────────────
    Leaflet helpers & device icon
@@ -33,9 +51,11 @@ function makeDeviceIcon(isAnomaly) {
       <div class="device-marker ${isAnomaly ? 'device-marker--alert' : ''}">
         <div class="device-marker-pulse"></div>
         <div class="device-marker-core">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-            <circle cx="12" cy="7" r="4"/>
+          <svg width="22" height="22" viewBox="0 0 100 100" fill="none">
+            <circle cx="34" cy="22" r="10.5" fill="#FFFFFF" />
+            <circle cx="66" cy="28" r="8" fill="#7DD3C7" />
+            <path d="M 33 37 C 16 42, 6 56, 12 73 C 18 87, 34 94, 50 97 C 40 88, 30 76, 30 65 C 30 52, 38 46, 46 53 C 41 44, 38 39, 33 37 Z" fill="#FFFFFF" />
+            <path d="M 66 40 C 77 44, 88 54, 86 68 C 84 80, 71 89, 50 97 C 58 87, 65 77, 65 67 C 65 57, 58 53, 50 61 C 56 49, 61 43, 66 40 Z" fill="#7DD3C7" />
           </svg>
         </div>
       </div>
@@ -46,231 +66,180 @@ function makeDeviceIcon(isAnomaly) {
 const deviceIconNormal = makeDeviceIcon(false);
 const deviceIconAlert = makeDeviceIcon(true);
 
-function FlyTo({ latlng }) {
+function makeDraftMarkerIcon() {
+  return L.divIcon({
+    className: '',
+    iconSize: [36, 36],
+    iconAnchor: [18, 36],
+    popupAnchor: [0, -36],
+    html: `
+      <div style="background:#2563EB; width:36px; height:36px; border-radius:50% 50% 50% 0; transform:rotate(-45deg); display:flex; align-items:center; justify-content:center; box-shadow:0 4px 12px rgba(37,99,235,0.4); border:2px solid #FFFFFF;">
+        <div style="width:12px; height:12px; background:#FFFFFF; border-radius:50%; transform:rotate(45deg);"></div>
+      </div>
+    `,
+  });
+}
+const draftMarkerIcon = makeDraftMarkerIcon();
+
+/**
+ * Dependable FlyTo handler using a sequence counter to allow re-centering on the same location
+ */
+function FlyTo({ target }) {
   const map = useMap();
-  const prevRef = useRef(null);
   useEffect(() => {
-    if (!latlng) return;
-    const key = `${latlng[0].toFixed(4)},${latlng[1].toFixed(4)}`;
-    if (prevRef.current === key) return;
-    prevRef.current = key;
-    map.flyTo(latlng, Math.max(map.getZoom(), 14), { duration: 0.6 });
-  }, [latlng, map]);
+    if (!target || !target.latlng) return;
+    map.flyTo(target.latlng, target.zoom || Math.max(map.getZoom(), 15), { duration: 0.6 });
+  }, [target, map]);
   return null;
 }
 
-function MapClickListener({ onClick }) {
-  useMapEvents({ click(e) { onClick?.(e.latlng); } });
+/**
+ * Captures map clicks when interactive placement or safe-zone editing is active
+ */
+function MapClickHandler({ isMapPickActive, onMapClick }) {
+  useMapEvents({
+    click(e) {
+      if (isMapPickActive && onMapClick) {
+        onMapClick(e.latlng.lat, e.latlng.lng);
+      }
+    }
+  });
+  return null;
+}
+
+/**
+ * MapResizeHandler:
+ * Automatically invalidates Leaflet map size on container resize and mode changes
+ */
+function MapResizeHandler({ isMapExpanded }) {
+  const map = useMap();
+
+  useEffect(() => {
+    map.invalidateSize();
+    const t1 = setTimeout(() => map.invalidateSize(), 80);
+    const t2 = setTimeout(() => map.invalidateSize(), 250);
+    const t3 = setTimeout(() => map.invalidateSize(), 500);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [isMapExpanded, map]);
+
+  useEffect(() => {
+    const container = map.getContainer();
+    if (!container || typeof ResizeObserver === 'undefined') return;
+
+    let resizeTimer = null;
+    const observer = new ResizeObserver(() => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        map.invalidateSize();
+      }, 50);
+    });
+
+    observer.observe(container);
+    return () => {
+      clearTimeout(resizeTimer);
+      observer.disconnect();
+    };
+  }, [map]);
+
   return null;
 }
 
 /* ──────────────────────────────────────────────────────────────
-   Mini Sparkline component (SVG)
+   Minimal Light-Themed Auth Page (Dedicated Institutional Login)
    ────────────────────────────────────────────────────────────── */
-function Sparkline({ data, width = 200, height = 40, color = '#10b981' }) {
-  if (!data || data.length < 2) return null;
-  const max = Math.max(...data, 100);
-  const min = Math.min(...data, 0);
-  const range = max - min || 1;
-  const points = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * width;
-    const y = height - ((v - min) / range) * height;
-    return `${x},${y}`;
-  }).join(' ');
-  return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: 'block' }}>
-      <polyline fill="none" stroke={color} strokeWidth="2" points={points} />
-    </svg>
-  );
-}
-
-/* ──────────────────────────────────────────────────────────────
-   Auth Page (Login / Register) with Cloudflare Backend & Quick Demo
-   ────────────────────────────────────────────────────────────── */
-function AuthPage({ onLogin }) {
-  const [mode, setMode] = useState('login');
-  const [name, setName] = useState('');
+function AuthPage({ onLogin, onBackToLanding }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('guardian');
-  const [deviceKey, setDeviceKey] = useState('CARE-TAG-01');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [serverStatus, setServerStatus] = useState('checking');
+  const [autoFilled, setAutoFilled] = useState(false);
 
-  // Verify Cloudflare backend connectivity
-  useEffect(() => {
-    fetch('/api/health')
-      .then(res => res.json())
-      .then(data => {
-        if (data.ok) setServerStatus('online');
-        else setServerStatus('local');
-      })
-      .catch(() => setServerStatus('local'));
-  }, []);
+  const handleFillTestAccount = () => {
+    setEmail('Singla_BE23@thapar.edu');
+    setPassword('12345');
+    setError('');
+    setAutoFilled(true);
+    setTimeout(() => setAutoFilled(false), 2500);
+  };
 
   async function handleSubmit(e) {
     if (e) e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      const result = mode === 'register'
-        ? await auth.register(name, email, password, role, deviceKey)
-        : await auth.login(email, password);
+      const result = await auth.login(email, password);
       if (result.ok) {
         onLogin(result.user);
       } else {
-        setError(result.error || 'Authentication failed');
+        setError(result.error || 'Authentication failed. Please verify your Login ID and password.');
       }
     } catch (err) {
-      setError(err.message || 'An unexpected error occurred');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // One-click quick login for testing
-  async function handleQuickLogin(demoEmail, demoRole, demoDevice) {
-    setEmail(demoEmail);
-    setPassword('caretag2026');
-    setError('');
-    setLoading(true);
-    try {
-      const result = await auth.login(demoEmail, 'caretag2026');
-      if (result.ok) {
-        onLogin(result.user);
-      } else {
-        // If not in KV yet, register it directly
-        const reg = await auth.register(
-          demoRole === 'caregiver' ? 'Marcus Vance, RN' : 'Dr. Sarah Jenkins',
-          demoEmail,
-          'caretag2026',
-          demoRole,
-          demoDevice
-        );
-        if (reg.ok) onLogin(reg.user);
-        else setError(reg.error);
-      }
-    } catch (err) {
-      setError(err.message || 'Quick login failed');
+      setError(err.message || 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="auth-page">
-      <div className="auth-card">
-        {/* Status Badge */}
-        <div className="auth-edge-badge">
-          <span className={`edge-dot ${serverStatus === 'online' ? 'edge-dot--online' : 'edge-dot--local'}`} />
-          <span>{serverStatus === 'online' ? 'Cloudflare Workers KV Active' : 'Edge Sync Ready'}</span>
-        </div>
+    <div className="auth-fullscreen-container">
+      <div className="auth-header-bar">
+        <button
+          type="button"
+          className="auth-back-btn"
+          onClick={onBackToLanding}
+          title="Return to CareTag Home"
+        >
+          <ArrowLeft size={16} />
+          <span>Back to Home</span>
+        </button>
 
-        {/* Brand Header */}
-        <div className="auth-logo">
-          <div className="auth-logo-icon">
-            <ShieldCheck size={32} />
+        <CareTagLogo variant="horizontal" size="sm" showTagline={false} />
+      </div>
+
+      <div className="auth-card" role="region" aria-labelledby="auth-card-title">
+        <div className="auth-card-header">
+          <div className="auth-card-icon-wrap">
+            <ShieldCheck size={28} color="#0D9488" />
           </div>
-          <h1>CareTag</h1>
-          <p>GPS Behavioral Monitoring & Real-time Geofence Intelligence</p>
+          <h2 id="auth-card-title">Caregiver Access Portal</h2>
+          <p>Sign in to view real-time smart band telemetry, safe places &amp; alerts.</p>
         </div>
 
-        {/* Mode Tabs */}
-        <div className="auth-tabs">
-          <button
-            type="button"
-            className={`auth-tab ${mode === 'login' ? 'active' : ''}`}
-            onClick={() => { setMode('login'); setError(''); }}
-          >
-            Sign In
-          </button>
-          <button
-            type="button"
-            className={`auth-tab ${mode === 'register' ? 'active' : ''}`}
-            onClick={() => { setMode('register'); setError(''); }}
-          >
-            Create Account
-          </button>
-        </div>
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="auth-form">
-          {mode === 'register' && (
-            <>
-              <div className="form-group">
-                <label>Full Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Dr. Sarah Jenkins"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Role</label>
-                <div className="auth-role-select">
-                  <button
-                    type="button"
-                    className={`role-chip ${role === 'guardian' ? 'active' : ''}`}
-                    onClick={() => setRole('guardian')}
-                  >
-                    Family Guardian
-                  </button>
-                  <button
-                    type="button"
-                    className={`role-chip ${role === 'caregiver' ? 'active' : ''}`}
-                    onClick={() => setRole('caregiver')}
-                  >
-                    Clinical Caregiver
-                  </button>
-                  <button
-                    type="button"
-                    className={`role-chip ${role === 'admin' ? 'active' : ''}`}
-                    onClick={() => setRole('admin')}
-                  >
-                    Administrator
-                  </button>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label>Device Tag ID</label>
-                <input
-                  type="text"
-                  placeholder="CARE-TAG-01"
-                  value={deviceKey}
-                  onChange={e => setDeviceKey(e.target.value)}
-                  required
-                />
-              </div>
-            </>
-          )}
-
-          <div className="form-group">
-            <label>Email Address</label>
-            <input
-              type="email"
-              placeholder="name@example.com"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Password</label>
-            <div className="password-input-wrapper">
+        <form onSubmit={handleSubmit} className="auth-form" noValidate>
+          <div className="auth-form-group">
+            <label htmlFor="auth-email">Login ID / Institutional Email</label>
+            <div className="auth-input-wrapper">
+              <Mail size={16} className="auth-input-icon" />
               <input
-                type={showPassword ? 'text' : 'password'}
-                placeholder="••••••••"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
+                id="auth-email"
+                type="text"
+                autoComplete="username"
+                placeholder="e.g. Singla_BE23@thapar.edu"
+                value={email}
+                onChange={e => { setEmail(e.target.value); if (error) setError(''); }}
                 required
-                minLength={4}
+                autoFocus
+              />
+            </div>
+          </div>
+
+          <div className="auth-form-group">
+            <label htmlFor="auth-password">Session Password</label>
+            <div className="auth-input-wrapper">
+              <Lock size={16} className="auth-input-icon" />
+              <input
+                id="auth-password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                placeholder="Enter assigned password"
+                value={password}
+                onChange={e => { setPassword(e.target.value); if (error) setError(''); }}
+                required
               />
               <button
                 type="button"
@@ -285,7 +254,7 @@ function AuthPage({ onLogin }) {
           </div>
 
           {error && (
-            <div className="auth-error">
+            <div className="auth-error-banner" role="alert">
               <AlertTriangle size={15} />
               <span>{error}</span>
             </div>
@@ -293,50 +262,50 @@ function AuthPage({ onLogin }) {
 
           <button
             type="submit"
-            className="btn btn-primary auth-submit-btn"
+            className="auth-submit-btn"
             disabled={loading}
           >
             {loading ? (
-              <span className="spinner" />
-            ) : mode === 'register' ? (
-              <>Create Account <ArrowRight size={16} /></>
+              <span className="auth-spinner" />
             ) : (
-              <>Sign In <ArrowRight size={16} /></>
+              <>
+                <span>Sign In to Dashboard</span>
+                <ArrowRight size={16} />
+              </>
             )}
           </button>
         </form>
 
-        {/* Quick Demo Logins */}
-        <div className="auth-quick-demo">
-          <div className="quick-demo-divider">
-            <span>or instant test access</span>
+        <div className="auth-test-helper">
+          <div className="auth-test-helper-content">
+            <div className="auth-test-helper-title">
+              <span className="auth-test-helper-dot" />
+              <span>Dedicated Test Account</span>
+            </div>
+            <div className="auth-test-helper-code">
+              <code>Singla_BE23@thapar.edu</code> &bull; <code>12345</code>
+            </div>
           </div>
-          <div className="quick-demo-buttons">
-            <button
-              type="button"
-              className="quick-demo-btn"
-              onClick={() => handleQuickLogin('demo@caretag.io', 'guardian', 'CARE-TAG-01')}
-              disabled={loading}
-            >
-              <Sparkles size={14} />
-              <span>Demo Guardian</span>
-            </button>
-            <button
-              type="button"
-              className="quick-demo-btn"
-              onClick={() => handleQuickLogin('caregiver@caretag.io', 'caregiver', 'CARE-TAG-02')}
-              disabled={loading}
-            >
-              <Activity size={14} />
-              <span>Demo Caregiver</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            className={`auth-test-helper-btn ${autoFilled ? 'is-filled' : ''}`}
+            onClick={handleFillTestAccount}
+            title="Auto-fill test credentials"
+          >
+            {autoFilled ? (
+              <>
+                <Check size={12} />
+                <span>Filled</span>
+              </>
+            ) : (
+              <span>Fill ID</span>
+            )}
+          </button>
         </div>
 
-        {/* Footer Note */}
         <div className="auth-footer-note">
-          <Cloud size={13} />
-          <span>Cloudflare Edge Worker • Real-time Firebase Ready</span>
+          <Lock size={12} />
+          <span>Protected Session &bull; Authorized Institutional Access Only</span>
         </div>
       </div>
     </div>
@@ -344,923 +313,1025 @@ function AuthPage({ onLogin }) {
 }
 
 /* ──────────────────────────────────────────────────────────────
-   Main App
+   Main App: Landing Showcase, Auth, and Live Dashboard Views
    ────────────────────────────────────────────────────────────── */
 
 function App() {
-  // ── Auth state ──
   const [session, setSession] = useState(() => auth.getSession());
+  const [view, setView] = useState('landing');
 
-  // If not logged in, show auth page
-  if (!session) {
-    return <AuthPage onLogin={setSession} />;
-  }
+  const handleLaunchDashboard = () => {
+    if (session) {
+      setView('dashboard');
+    } else {
+      setView('auth');
+    }
+  };
 
-  return <Dashboard session={session} onLogout={() => { auth.logout(); setSession(null); }} />;
+  return (
+    <>
+      {view === 'landing' && (
+        <LandingPage
+          onLaunchDashboard={handleLaunchDashboard}
+          onOpenAuth={() => setView('auth')}
+          session={session}
+        />
+      )}
+
+      {view === 'auth' && (
+        <AuthPage
+          onLogin={(s) => {
+            setSession(s);
+            setView('dashboard');
+          }}
+          onBackToLanding={() => setView('landing')}
+        />
+      )}
+
+      {view === 'dashboard' && session && (
+        <Dashboard
+          session={session}
+          onLogout={() => {
+            auth.logout();
+            setSession(null);
+            setView('landing');
+          }}
+          onGoToLanding={() => setView('landing')}
+        />
+      )}
+
+      {view === 'landing' && <TaggyChatbot />}
+      <CookieBanner />
+    </>
+  );
 }
 
 /* ──────────────────────────────────────────────────────────────
-   Dashboard (authenticated)
+   CareTag Redesigned Dashboard Component
    ────────────────────────────────────────────────────────────── */
 
-function Dashboard({ session, onLogout }) {
+function Dashboard({ session, onLogout, onGoToLanding }) {
   const userId = session.userId;
+  const deviceKey = session.deviceKey || 'CARE-TAG-01';
 
-  // ── Data state ──
+  // ── Core Data state ──
   const [latest, setLatest] = useState(null);
-  const [alert, setAlert] = useState(null);
   const [geofences, setGeofences] = useState([]);
-  const [geofencesLoading, setGeofencesLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState(null);
-  const [connected, setConnected] = useState(false);
+  const [selectedZoneId, setSelectedZoneId] = useState(null);
+
+  // ── Smart Band Physical Hardware state ──
+  const [isLiveHardwareMode, setIsLiveHardwareMode] = useState(true);
+  const [hardwareStatus, setHardwareStatus] = useState({
+    connected: false,
+    isHardwareStreaming: false,
+    isStale: false,
+    statusText: 'CONNECTING TO SMART BAND...',
+    batteryPercent: 92,
+  });
 
   // ── Simulation state ──
   const [simRunning, setSimRunning] = useState(false);
-  const [simPacketCount, setSimPacketCount] = useState(0);
+  const [activeScenario, setActiveScenario] = useState(null);
+  const [simulatedAlerts, setSimulatedAlerts] = useState([]);
 
-  // ── New feature states ──
-  const [alerts, setAlerts] = useState(() => alertStore.getRecentAlerts(userId, 20));
+  // ── Alerts & Telemetry stores ──
+  const [alerts, setAlerts] = useState(() => alertStore.getRecentAlerts(userId, 30));
   const [unackCount, setUnackCount] = useState(() => alertStore.getUnacknowledgedCount(userId));
-  const [batStats, setBatStats] = useState(() => batteryStore.getBatteryStats(userId));
-  const [progress, setProgress] = useState(() => progressStore.getProgressHistory(userId, 8));
-  const [voiceEnabled, setVoiceEnabled] = useState(() => voiceAlarm.isEnabled());
 
-  // ── Safety status ──
-  const [safetyStatus, setSafetyStatus] = useState('safe'); // 'safe' | 'warning' | 'breach'
+  // ── Interactive Map & Draft Safe-Zone State ──
+  const [draftZone, setDraftZone] = useState(null);
+  const [isMapPickActive, setIsMapPickActive] = useState(false);
+  const [recentTrail, setRecentTrail] = useState([]);
+  const [evaluationLog, setEvaluationLog] = useState([]);
 
-  // ── UI state ──
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // ── Routine History & Profile state ──
+  const [routineHistory, setRoutineHistory] = useState({});
+  const [routineProfile, setRoutineProfile] = useState(null);
+
+  // ── Navigation & UI State ──
+  // Tabs: 'overview' | 'safezones' | 'alerts' | 'inspector'
+  const [activeTab, setActiveTab] = useState('overview');
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
+  const [isMapExpanded, setIsMapExpanded] = useState(false);
+  const [showExpectedRoute, setShowExpectedRoute] = useState(true);
+  const [flyToTarget, setFlyToTarget] = useState(null);
   const [toasts, setToasts] = useState([]);
-  const [confirmDelete, setConfirmDelete] = useState(null);
-  const [formErrors, setFormErrors] = useState({});
-  const [activeTab, setActiveTab] = useState('controls'); // controls | alerts | battery | progress
 
-  const [formState, setFormState] = useState({
-    label: '',
-    centerLat: 30.3398,
-    centerLng: 76.3869,
-    radiusMeters: 500
-  });
-
-  const [showOnboard, setShowOnboard] = useState(() => {
-    try { return localStorage.getItem('caretag.onboard') !== 'done'; } catch { return true; }
-  });
-
-  const [flyTo, setFlyTo] = useState(null);
-  const alertTimer = useRef(null);
   const geofencesRef = useRef(geofences);
+  useEffect(() => {
+    geofencesRef.current = geofences;
+  }, [geofences]);
 
-  // Keep geofencesRef in sync
-  useEffect(() => { geofencesRef.current = geofences; }, [geofences]);
+  const lastObservedRecordTime = useRef(0);
 
-  // ── Toast system ──
+  // Toast notification dispatcher
   const pushToast = useCallback((text, type = 'info', ttl = 4000) => {
     const id = Date.now() + Math.random();
     setToasts(t => [...t, { id, text, type }]);
     setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), ttl);
   }, []);
 
-  // ── Alert banner ──
-  const showAlertBanner = useCallback((text) => {
-    setAlert(text);
-    clearTimeout(alertTimer.current);
-    alertTimer.current = setTimeout(() => setAlert(null), 8000);
-  }, []);
-
-  // ── Refresh stores helper ──
-  const refreshStores = useCallback(() => {
-    setAlerts(alertStore.getRecentAlerts(userId, 20));
+  // Reload alerts from persistent store
+  const refreshAlerts = useCallback(() => {
+    setAlerts(alertStore.getRecentAlerts(userId, 30));
     setUnackCount(alertStore.getUnacknowledgedCount(userId));
-    setBatStats(batteryStore.getBatteryStats(userId));
-    setProgress(progressStore.getProgressHistory(userId, 8));
   }, [userId]);
 
-  // ── Load geofences ──
-  const loadGeofences = useCallback(async () => {
+  // Load Geofences and Routine data from Firebase & local stores
+  const loadData = useCallback(async () => {
     try {
-      const list = await api.fetchGeofences();
+      const list = await api.fetchGeofences(deviceKey);
       setGeofences(list || []);
+
+      // Load routine history and profile from Firebase RTDB
+      const history = await fetchRoutineHistoryFromFirebase(deviceKey);
+      setRoutineHistory(history || {});
+      const prof = await fetchRoutineProfileFromFirebase(deviceKey);
+      if (prof) setRoutineProfile(prof);
+
+      // If user has zero safe places and has not dismissed wizard, show wizard
+      const hasCompleted = localStorage.getItem(`caretag_setup_completed_${userId}`);
+      if ((!list || list.length === 0) && !hasCompleted) {
+        setShowSetupWizard(true);
+      }
     } catch {
-      pushToast('Failed to load geofences', 'error');
-    } finally {
-      setGeofencesLoading(false);
+      pushToast('Unable to synchronize safe places with server', 'error');
     }
-  }, [pushToast]);
+  }, [deviceKey, userId, pushToast]);
 
-  useEffect(() => { loadGeofences(); }, [loadGeofences]);
-
-  // ── Polling + SignalR (for real backend) — DISABLED when simulation runs ──
   useEffect(() => {
-    if (simRunning) return;
+    loadData();
+  }, [loadData]);
 
+  // ── Live Hardware Telemetry Subscription (Firebase RTDB) ──
+  useEffect(() => {
     let mounted = true;
 
-    async function poll() {
-      try {
-        const p = await api.fetchLatestPacket();
-        if (!mounted || !p) return;
-        if (p.latitude && p.longitude) {
-          setLatest({ lat: Number(p.latitude), lng: Number(p.longitude), packet: p });
-          const score = Number(p.deviationScore) || 0;
-          if (score > 0.7 || p.motionState?.toLowerCase() === 'abnormal') {
-            showAlertBanner(`Alert: ${p.packetType} — deviation ${score.toFixed(2)}`);
+    const unsubscribe = subscribeHardwareTelemetry(
+      (hwPacket) => {
+        if (!mounted || !hwPacket) return;
+
+        // Only update current display packet if live hardware mode is active and sim is not running
+        if (!simRunning && isLiveHardwareMode) {
+          const currentGeos = geofencesRef.current || [];
+          
+          // Evaluate safety state using scheduled geofencing and jitter suppression
+          const safetyResult = evaluateSafetyState(hwPacket, currentGeos);
+
+          // Update recent movement trail
+          if (hwPacket.latitude && hwPacket.longitude) {
+            setRecentTrail(prev => {
+              const updated = [...prev, [hwPacket.latitude, hwPacket.longitude]];
+              return updated.slice(-15);
+            });
+          }
+
+          // Telemetry Enrichment
+          const enriched = {
+            ...hwPacket,
+            nearestGeofence: safetyResult.nearestZone,
+            distToNearestKm: Math.abs(safetyResult.distanceToBoundaryKm),
+            isAnomaly: safetyResult.status === 'deviation' || safetyResult.status === 'outside',
+            deviationScore: safetyResult.status === 'deviation' ? 0.85 : 0.05,
+            safetyStatus: safetyResult.status,
+            safetyExplanation: safetyResult.explanation,
+          };
+
+          setLatest({ lat: enriched.latitude, lng: enriched.longitude, packet: enriched });
+
+          // Record evaluation in technical inspector log
+          setEvaluationLog(prev => [
+            {
+              time: new Date().toLocaleTimeString(),
+              zone: safetyResult.nearestZone || 'Safe Place',
+              distanceMeters: Math.round(Math.abs(safetyResult.distanceToBoundaryKm) * 1000),
+              event: safetyResult.eventType || 'None',
+              reason: safetyResult.explanation,
+            },
+            ...prev.slice(0, 19)
+          ]);
+
+          // Handle real safety alert events (only boundary_breach and route_deviation)
+          if (safetyResult.status === 'outside' && safetyResult.isScheduledActive) {
+            const lastOutAlert = alertStore.getRecentAlerts(userId, 1)[0];
+            const isRecent = lastOutAlert && (Date.now() - new Date(lastOutAlert.timestamp).getTime()) < 60000;
+            if (!isRecent) {
+              alertStore.saveAlert(userId, {
+                type: 'boundary_breach',
+                deviceId: deviceKey,
+                latitude: enriched.latitude,
+                longitude: enriched.longitude,
+                nearestGeofence: safetyResult.nearestZone,
+                message: `Child stepped outside safe place boundary by ${(safetyResult.distanceToBoundaryKm * 1000).toFixed(0)}m.`,
+                distanceMeters: Math.round(safetyResult.distanceToBoundaryKm * 1000),
+                source: 'hardware',
+              });
+              refreshAlerts();
+              pushToast(`Safety Alert: Child outside "${safetyResult.nearestZone}"`, 'warning');
+            }
+          } else if (safetyResult.status === 'deviation') {
+            const lastDevAlert = alertStore.getRecentAlerts(userId, 1)[0];
+            const isRecent = lastDevAlert && (Date.now() - new Date(lastDevAlert.timestamp).getTime()) < 60000;
+            if (!isRecent) {
+              alertStore.saveAlert(userId, {
+                type: 'route_deviation',
+                deviceId: deviceKey,
+                latitude: enriched.latitude,
+                longitude: enriched.longitude,
+                nearestGeofence: safetyResult.nearestZone,
+                message: 'Child deviated from established daily route corridor.',
+                source: 'hardware',
+              });
+              refreshAlerts();
+              pushToast('Notice: Route deviation flagged against learned pattern', 'info');
+            }
+          }
+
+          // Persist eligible telemetry for routine model (rate-limited to every 30s)
+          const now = Date.now();
+          if (now - lastObservedRecordTime.current >= 30000 && hwPacket.gps?.valid) {
+            lastObservedRecordTime.current = now;
+            saveRoutineObservationToFirebase(deviceKey, hwPacket).catch(() => {});
           }
         }
-      } catch {}
-    }
-
-    poll();
-    const intervalId = setInterval(poll, 5000);
-
-    startSignalR((data) => {
-      if (!mounted) return;
-      setConnected(true);
-      if (data?.latitude && data?.longitude) {
-        setLatest({ lat: Number(data.latitude), lng: Number(data.longitude), packet: data });
-        const score = Number(data.deviationScore) || 0;
-        if (score > 0.7 || data.motionState?.toLowerCase() === 'abnormal') {
-          showAlertBanner(`Live: ${data.packetType} — deviation ${score.toFixed(2)}`);
-        }
+      },
+      (hwStatus) => {
+        if (!mounted) return;
+        setHardwareStatus(hwStatus);
       }
-    }).then(() => setConnected(true))
-      .catch(() => setConnected(false));
+    );
 
     return () => {
       mounted = false;
-      clearInterval(intervalId);
-      clearTimeout(alertTimer.current);
-      stopSignalR();
+      if (unsubscribe) unsubscribe();
     };
-  }, [showAlertBanner, simRunning]);
+  }, [simRunning, isLiveHardwareMode, userId, deviceKey, pushToast, refreshAlerts]);
 
-  // ── Simulation controls ──
-  const startSim = useCallback(() => {
-    const geos = geofencesRef.current;
-    if (geos.length === 0) {
-      pushToast('Create at least one geofence first to start simulation', 'error');
-      return;
-    }
-
-    simulation.start(geos, (packet) => {
-      setLatest({ lat: packet.latitude, lng: packet.longitude, packet });
-      setSimPacketCount(c => c + 1);
-
-      // ── Store battery data ──
-      if (packet.batteryPercent != null) {
-        batteryStore.saveBatterySnapshot(userId, packet.batteryPercent, packet.deviceKey);
-
-        // Low battery alert
-        if (packet.batteryPercent < 20) {
-          alertStore.saveAlert(userId, {
-            type: 'low_battery',
-            latitude: packet.latitude,
-            longitude: packet.longitude,
-            batteryPercent: packet.batteryPercent,
-            message: `Low battery: ${packet.batteryPercent}%`,
-          });
-          voiceAlarm.trigger('low_battery', { batteryPercent: packet.batteryPercent });
-          refreshStores();
-        }
-      }
-
-      // ── Anomaly / Out-of-zone detection ──
-      if (packet.isAnomaly) {
-        const alertData = {
-          type: packet.distToNearestKm != null ? 'out_of_zone' : 'anomaly',
-          latitude: packet.latitude,
-          longitude: packet.longitude,
-          nearestGeofence: packet.nearestGeofence,
-          distance: packet.distToNearestKm,
-          deviationScore: packet.deviationScore,
-          message: `⚡ Anomaly — deviation ${packet.deviationScore.toFixed(2)} (${packet.distToNearestKm?.toFixed(1) || '?'}km from "${packet.nearestGeofence || 'zone'}")`,
-        };
-
-        alertStore.saveAlert(userId, alertData);
-
-        // Voice alarm
-        voiceAlarm.trigger(alertData.type, {
-          nearestGeofence: packet.nearestGeofence,
-          distance: packet.distToNearestKm,
-          deviationScore: packet.deviationScore,
-        });
-
-        showAlertBanner(alertData.message);
-        setSafetyStatus('breach');
-        refreshStores();
-      } else {
-        setSafetyStatus('safe');
-      }
-
-      // Periodic refresh of stores (every 10 packets)
-      if ((packet.id || 0) % 10 === 0) {
-        refreshStores();
-      }
-    }, 3000);
-
+  // ── Capstone Scenario Simulation Controls (Strictly Isolated) ──
+  const handleStartScenario = (scenarioId) => {
+    setIsLiveHardwareMode(false);
     setSimRunning(true);
-    setSimPacketCount(0);
-    pushToast('Simulation started — device is moving between your geofences', 'success');
-  }, [pushToast, showAlertBanner, userId, refreshStores]);
+    setActiveScenario(scenarioId);
 
-  const stopSim = useCallback(() => {
+    const scenarioMeta = SCENARIO_PRESETS[scenarioId] || scenarioId;
+    pushToast(`Simulation Active: Running ${scenarioMeta}`, 'info');
+
+    simulation.startScenario(scenarioId, geofencesRef.current, (simPacket) => {
+      setLatest({ lat: simPacket.latitude, lng: simPacket.longitude, packet: simPacket });
+
+      // If simulated packet triggers an anomaly, store ONLY in simulated alerts (NEVER pollutes real history)
+      if (simPacket.isAnomaly) {
+        setSimulatedAlerts(prev => [
+          {
+            id: `sim-alert-${Date.now()}`,
+            type: simPacket.eventType,
+            category: simPacket.eventType,
+            timestamp: new Date().toISOString(),
+            latitude: simPacket.latitude,
+            longitude: simPacket.longitude,
+            nearestGeofence: simPacket.nearestGeofence,
+            message: simPacket.eventType === 'boundary_breach'
+              ? `Simulated boundary breach: device stepped outside "${simPacket.nearestGeofence}"`
+              : 'Simulated route deviation: device departed from learned corridor',
+            source: 'simulation',
+            scenarioId,
+          },
+          ...prev.slice(0, 19)
+        ]);
+      }
+    });
+  };
+
+  const handleStopScenario = () => {
     simulation.stop();
     setSimRunning(false);
-    setSafetyStatus('safe');
-    refreshStores();
-    pushToast('Simulation stopped');
-  }, [pushToast, refreshStores]);
+    setActiveScenario(null);
+    setIsLiveHardwareMode(true);
+    pushToast('Simulation stopped. Resumed live hardware telemetry.', 'info');
+  };
 
-  // Update simulation when geofences change
-  useEffect(() => {
-    if (simRunning) {
-      simulation.updateGeofences(geofences);
-    }
-  }, [geofences, simRunning]);
+  const handleResetScenario = () => {
+    simulation.reset();
+    setSimRunning(false);
+    setActiveScenario(null);
+    setSimulatedAlerts([]);
+    setIsLiveHardwareMode(true);
+    pushToast('Simulation reset. Returned to live hardware mode.', 'info');
+  };
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => { simulation.stop(); voiceAlarm.stop(); };
-  }, []);
+  const handleManualSimulate = (lat, lon, speed) => {
+    setIsLiveHardwareMode(false);
+    setSimRunning(true);
+    setActiveScenario('manual_custom');
+    simulation.setManualPosition(lat, lon, speed);
+    pushToast(`Injected coordinates: ${Number(lat).toFixed(4)}, ${Number(lon).toFixed(4)}`, 'info');
+  };
 
-  // ── Form validation ──
-  function validateForm() {
-    const errors = {};
-    if (!formState.label.trim()) errors.label = 'Label is required';
-    const lat = Number(formState.centerLat);
-    const lng = Number(formState.centerLng);
-    if (isNaN(lat) || lat < -90 || lat > 90) errors.centerLat = 'Invalid (–90 to 90)';
-    if (isNaN(lng) || lng < -180 || lng > 180) errors.centerLng = 'Invalid (–180 to 180)';
-    const r = Number(formState.radiusMeters);
-    if (isNaN(r) || r <= 0) errors.radiusMeters = 'Must be > 0';
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  }
-
-  // ── Save geofence ──
-  async function handleSaveGeofence(e) {
-    e.preventDefault();
-    if (!validateForm()) return;
-    setSaving(true);
+  // ── Safe Zone Management Handlers ──
+  const handleSaveGeofence = async (zoneData) => {
     try {
-      const res = await api.postGeofence(undefined, {
-        DeviceName: 'DEFAULT',
-        Label: formState.label.trim(),
-        CenterLatitude: Number(formState.centerLat),
-        CenterLongitude: Number(formState.centerLng),
-        RadiusMeters: Number(formState.radiusMeters),
-        ActiveFrom: null,
-        ActiveTo: null,
-        IsActive: true
+      const created = await api.createGeofence(zoneData, deviceKey);
+      setGeofences(prev => {
+        const idx = prev.findIndex(g => String(g.id) === String(created.id));
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = created;
+          return updated;
+        }
+        return [...prev, created];
       });
-      if (res?.ok) {
-        pushToast(`Geofence "${res.data?.label || formState.label}" saved`, 'success');
-        setFormState(s => ({ ...s, label: '' }));
-        setFormErrors({});
-        await loadGeofences();
-      } else {
-        pushToast(typeof res?.data === 'string' ? res.data : 'Save failed — try a different label', 'error');
-      }
+      setSelectedZoneId(created.id);
+      setFlyToTarget({ latlng: [created.centerLatitude, created.centerLongitude], timestamp: Date.now() });
+      pushToast(`Safe place "${created.label}" saved and active.`, 'success');
+      return created;
     } catch (err) {
-      pushToast(`Error: ${err.message || 'Network error'}`, 'error');
-    } finally {
-      setSaving(false);
+      pushToast(`Failed to save safe place: ${err.message}`, 'error');
+      return false;
     }
-  }
+  };
 
-  // ── Delete geofence ──
-  async function handleDeleteGeofence(id, label) {
-    setDeletingId(id);
+  const handleUpdateGeofence = async (id, updates) => {
     try {
-      const res = await api.deleteGeofence(undefined, id);
-      if (res.ok) {
-        pushToast(`"${label}" deleted`, 'success');
-        await loadGeofences();
-      } else {
-        pushToast(`Failed to delete "${label}"`, 'error');
-      }
+      const updated = await api.updateGeofence(id, updates, deviceKey);
+      setGeofences(prev => prev.map(g => String(g.id) === String(id) ? { ...g, ...updated } : g));
+      pushToast('Safe place updated.', 'success');
+      return updated;
     } catch (err) {
-      pushToast(`Error: ${err.message || 'Network error'}`, 'error');
-    } finally {
-      setDeletingId(null);
-      setConfirmDelete(null);
+      pushToast(`Failed to update: ${err.message}`, 'error');
+      return false;
     }
-  }
+  };
 
-  // ── Map click ──
-  function handleMapClick(latlng) {
-    setFormState(s => ({
-      ...s,
-      centerLat: parseFloat(latlng.lat.toFixed(6)),
-      centerLng: parseFloat(latlng.lng.toFixed(6))
-    }));
-    setFormErrors(e => ({ ...e, centerLat: undefined, centerLng: undefined }));
-    if (!sidebarOpen) setSidebarOpen(true);
-  }
+  const handleDeleteGeofence = async (id) => {
+    try {
+      await api.deleteGeofence(deviceKey, id);
+      setGeofences(prev => prev.filter(g => String(g.id) !== String(id)));
+      if (selectedZoneId === id) setSelectedZoneId(null);
+      pushToast('Safe place removed.', 'info');
+      return true;
+    } catch {
+      pushToast('Failed to delete safe place.', 'error');
+      return false;
+    }
+  };
 
-  function dismissOnboard() {
-    setShowOnboard(false);
-    try { localStorage.setItem('caretag.onboard', 'done'); } catch {}
-  }
-
-  // ── Alert acknowledge ──
-  function handleAckAlert(alertId) {
+  const handleAcknowledgeAlert = (alertId) => {
     alertStore.acknowledgeAlert(userId, alertId);
-    refreshStores();
-  }
+    refreshAlerts();
+    pushToast('Alert marked as acknowledged.', 'info');
+  };
 
-  function handleAckAll() {
+  const handleAcknowledgeAll = () => {
     alertStore.acknowledgeAll(userId);
-    refreshStores();
-  }
+    refreshAlerts();
+    pushToast('All alerts acknowledged.', 'info');
+  };
 
-  // ── Voice alarm toggle ──
-  function handleToggleVoice() {
-    const newState = voiceAlarm.toggle();
-    setVoiceEnabled(newState);
-    pushToast(newState ? 'Voice alarm enabled' : 'Voice alarm disabled');
-  }
+  const handleInspectAlertOnMap = (alertItem) => {
+    if (alertItem.latitude && alertItem.longitude) {
+      setFlyToTarget({ latlng: [alertItem.latitude, alertItem.longitude], timestamp: Date.now() });
+      pushToast(`Centering map on alert location (${alertItem.nearestGeofence || 'Location'})`, 'info');
+    }
+  };
 
-  // ── Helpers ──
-  const pkt = latest?.packet;
-  const devScore = pkt ? (Number(pkt.deviationScore) || 0) : null;
-  const scoreClass = devScore === null ? '' : devScore > 0.7 ? 'value-bad' : devScore > 0.4 ? 'value-warn' : 'value-good';
-  const connStatus = simRunning ? 'simulating' : connected ? 'connected' : 'disconnected';
+  // Map click handler for placing or editing a zone
+  const handleMapClick = (clickLat, clickLng) => {
+    if (draftZone) {
+      setDraftZone(prev => ({
+        ...prev,
+        centerLatitude: parseFloat(clickLat.toFixed(6)),
+        centerLongitude: parseFloat(clickLng.toFixed(6)),
+        _fromMap: true,
+      }));
+    }
+  };
 
-  const safetyLabel = safetyStatus === 'breach' ? 'OUT OF ZONE' : safetyStatus === 'warning' ? 'WARNING' : 'SAFE';
-  const safetyClass = safetyStatus === 'breach' ? 'safety--breach' : safetyStatus === 'warning' ? 'safety--warning' : 'safety--safe';
+  // Coordinates fallback if not yet received
+  const mapCenterLat = latest?.lat || (geofences[0] ? geofences[0].centerLatitude : 30.3491155);
+  const mapCenterLng = latest?.lng || (geofences[0] ? geofences[0].centerLongitude : 76.4117108);
 
-  // Progress summary
-  const monthsWithData = progress.filter(p => p.hasData).length;
+  // Expected route corridor coordinates
+  const routeWaypoints = geofences.length >= 2
+    ? geofences.slice(0, 4).map(g => [g.centerLatitude, g.centerLongitude])
+    : [
+        [30.34911, 76.41171],
+        [30.35120, 76.41580],
+        [30.35380, 76.41950],
+        [30.35550, 76.42250]
+      ];
 
-  /* ──────────────────────────────────────────────────────────
-     Render
-     ────────────────────────────────────────────────────────── */
+  // Active top alert (only non-nominal)
+  const topAlert = alerts.find(a => !a.acknowledged && a.type !== 'nominal_safety');
+
   return (
-    <div className={`app-layout ${!sidebarOpen ? 'sidebar-closed' : ''}`}>
+    <div className="caretag-app-shell">
+      {/* ── Caregiver Navigation Header ── */}
+      <header className="caretag-header" role="banner">
+        <div className="caretag-header-left">
+          <button
+            type="button"
+            className="brand-home-link"
+            onClick={onGoToLanding}
+            title="CareTag Home"
+          >
+            <CareTagLogo variant="horizontal" size="sm" showTagline={false} />
+          </button>
 
-      {/* ── Toasts ── */}
-      <div className="toast-container">
-        {toasts.map(t => (
-          <div key={t.id} className={`toast ${t.type === 'error' ? 'toast--error' : t.type === 'success' ? 'toast--success' : ''}`}>
-            {t.type === 'error' && <AlertTriangle size={15} />}
-            {t.type === 'success' && <CheckCircle size={15} />}
-            {t.text}
+          {/* Child Active Profile Pill */}
+          <div className="child-profile-pill" title="Monitored Child Profile">
+            <div className="child-avatar">
+              <span>B</span>
+            </div>
+            <div className="child-meta">
+              <span className="child-name">Bhavishya Singla</span>
+              <span className="child-device-tag">
+                {isLiveHardwareMode ? 'Smart Band ESP32' : `Sim: ${activeScenario || 'Active'}`}
+              </span>
+            </div>
           </div>
-        ))}
-      </div>
+        </div>
 
-      {/* ── Onboarding ── */}
-      {showOnboard && (
-        <div className="onboard-overlay" role="dialog" aria-label="Welcome" onClick={dismissOnboard}>
-          <div className="onboard-card" onClick={e => e.stopPropagation()}>
-            <h2><Zap size={20} /> Welcome to CareTag</h2>
-            <p>
-              <strong>1.</strong> Click the map to pick a location.<br />
-              <strong>2.</strong> Name it and set a radius in the sidebar, then <strong>Save Geofence</strong>.<br />
-              <strong>3.</strong> Create 2+ geofences and hit <strong>▶ Start Simulation</strong> to watch a virtual device move between them with ML-powered anomaly detection.
-            </p>
-            <button className="btn btn-primary" onClick={dismissOnboard} style={{ width: '100%' }}>
-              Got it — let's go
+        {/* Center: Simplified Caregiver Navigation (Home, Safe Places, Alerts, Setup) */}
+        <div className="caretag-header-center">
+          <nav className="view-mode-tabs" aria-label="Caregiver views">
+            <button
+              type="button"
+              className={`view-tab-btn ${activeTab === 'overview' && !showSetupWizard ? 'active' : ''}`}
+              onClick={() => { setActiveTab('overview'); setShowSetupWizard(false); setIsMapExpanded(false); }}
+            >
+              <Shield size={14} />
+              <span>Home</span>
             </button>
-          </div>
-        </div>
-      )}
 
-      {/* ── Alert banner ── */}
-      {alert && (
-        <div className="live-alert">
-          <AlertTriangle size={16} />
-          {alert}
-          <button className="alert-dismiss" onClick={() => { setAlert(null); voiceAlarm.stop(); }} title="Dismiss">
-            <X size={14} />
+            <button
+              type="button"
+              className={`view-tab-btn ${activeTab === 'safezones' && !showSetupWizard ? 'active' : ''}`}
+              onClick={() => { setActiveTab('safezones'); setShowSetupWizard(false); setIsMapExpanded(false); }}
+            >
+              <MapPin size={14} />
+              <span>Safe Places</span>
+              {geofences.length > 0 && <span className="tab-counter-badge">{geofences.length}</span>}
+            </button>
+
+            <button
+              type="button"
+              className={`view-tab-btn ${activeTab === 'alerts' && !showSetupWizard ? 'active' : ''}`}
+              onClick={() => { setActiveTab('alerts'); setShowSetupWizard(false); setIsMapExpanded(false); }}
+            >
+              <Bell size={14} />
+              <span>Alerts</span>
+              {unackCount > 0 && <span className="tab-counter-badge tab-counter-badge--warn">{unackCount}</span>}
+            </button>
+
+            <button
+              type="button"
+              className={`view-tab-btn ${showSetupWizard ? 'active' : ''}`}
+              onClick={() => {
+                setShowSetupWizard(true);
+                setIsMapExpanded(false);
+              }}
+              title="Guided Setup Wizard"
+            >
+              <Sliders size={14} />
+              <span>Setup</span>
+            </button>
+          </nav>
+        </div>
+
+        {/* Right: Telemetry Live Indicator, Inspector Shortcut, Logout */}
+        <div className="caretag-header-right">
+          {/* Live Telemetry / Simulation Badge */}
+          {(() => {
+            if (simRunning) {
+              return (
+                <div className="live-source-badge live-source-badge--sim" title="Demonstration scenario running">
+                  <span className="live-source-pulse" />
+                  <span className="live-source-label">Simulation Active</span>
+                </div>
+              );
+            }
+            const hwMeta = getDeviceStatusMeta(hardwareStatus.deviceStatus, hardwareStatus.ageSeconds);
+            const badgeClass = hwMeta.isLive
+              ? 'live-source-badge--hw'
+              : hwMeta.isStale
+              ? 'live-source-badge--stale'
+              : hardwareStatus.deviceStatus === DEVICE_STATUS.CONNECTION_ERROR
+              ? 'live-source-badge--error'
+              : 'live-source-badge--offline';
+            return (
+              <div className={`live-source-badge ${badgeClass}`} title={hwMeta.description}>
+                <span className="live-source-pulse" />
+                <span className="live-source-label">
+                  {hwMeta.badgeText}
+                </span>
+              </div>
+            );
+          })()}
+
+          {/* Dedicated Engineering Technical Inspector Button */}
+          <button
+            type="button"
+            className={`header-action-btn ${activeTab === 'inspector' && !showSetupWizard ? 'header-action-btn--active' : ''}`}
+            onClick={() => {
+              setShowSetupWizard(false);
+              setActiveTab(t => t === 'inspector' ? 'overview' : 'inspector');
+              setIsMapExpanded(false);
+            }}
+            title="Technical Inspector &amp; Capstone Console"
+          >
+            <Terminal size={14} />
+            <span className="header-btn-text">Inspector</span>
           </button>
-        </div>
-      )}
-
-      {/* ── Delete confirmation ── */}
-      {confirmDelete && (
-        <div className="confirm-overlay" onClick={() => setConfirmDelete(null)}>
-          <div className="confirm-card" onClick={e => e.stopPropagation()}>
-            <h3><Trash2 size={18} /> Delete geofence</h3>
-            <p>Are you sure you want to delete <strong>"{confirmDelete.label}"</strong>? This cannot be undone.</p>
-            <div className="confirm-actions">
-              <button className="btn btn-ghost" onClick={() => setConfirmDelete(null)}>Cancel</button>
-              <button
-                className="btn btn-danger-ghost"
-                disabled={deletingId === confirmDelete.id}
-                onClick={() => handleDeleteGeofence(confirmDelete.id, confirmDelete.label)}
-              >
-                {deletingId === confirmDelete.id ? <span className="spinner" /> : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Top Bar ── */}
-      <div className="top-bar">
-        <div className="top-bar-left">
-          <div className="app-logo">
-            <MapPin size={20} />
-            CareTag
-          </div>
-        </div>
-        <div className="top-bar-right">
-          {/* Safety status badge */}
-          <div className={`safety-badge ${safetyClass}`}>
-            {safetyStatus === 'breach' ? <ShieldAlert size={14} /> : <ShieldCheck size={14} />}
-            {safetyLabel}
-          </div>
-
-          {/* Voice alarm indicator */}
-          <button className="icon-btn" onClick={handleToggleVoice} title={voiceEnabled ? 'Voice alarm ON' : 'Voice alarm OFF'}>
-            {voiceEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-          </button>
-
-          {/* Alert badge */}
-          <button className="icon-btn" onClick={() => { setSidebarOpen(true); setActiveTab('alerts'); }} title="Alerts">
-            <Bell size={16} />
-            {unackCount > 0 && <span className="badge-count">{unackCount > 99 ? '99+' : unackCount}</span>}
-          </button>
-
-          <div className={`connection-badge connection-badge--${connStatus}`}>
-            <span className="connection-dot" />
-            {connStatus === 'simulating' ? 'SIMULATING' : connStatus === 'connected' ? 'LIVE' : 'OFFLINE'}
-            {connStatus === 'simulating' ? <Radio size={13} /> : connStatus === 'connected' ? <Wifi size={13} /> : <WifiOff size={13} />}
-          </div>
-
-          {/* User menu */}
-          <div className="user-badge" title={`Signed in as ${session.email} • Device: ${session.deviceKey || 'CARE-TAG-01'}`}>
-            <User size={14} />
-            <div className="user-badge-details">
-              <span className="user-name">{session.name}</span>
-              <span className="user-role-badge">{session.role || 'guardian'}</span>
-            </div>
-            <span className="device-tag-badge">{session.deviceKey || 'CARE-TAG-01'}</span>
-            <button className="icon-btn" onClick={onLogout} title="Logout"><LogOut size={14} /></button>
-          </div>
 
           <button
-            className="sidebar-toggle-btn"
-            onClick={() => setSidebarOpen(s => !s)}
-            aria-label={sidebarOpen ? 'Close panel' : 'Open panel'}
+            type="button"
+            className="header-logout-btn"
+            onClick={onLogout}
+            title={`Signed in as ${session.email} • Click to Sign Out`}
           >
-            {sidebarOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
-            {sidebarOpen ? 'Hide' : 'Show'}
+            <LogOut size={15} />
+            <span className="header-logout-text">Sign Out</span>
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* ── Map ── */}
-      <div className="map-container">
-        <MapContainer center={[30.3398, 76.3869]} zoom={12} scrollWheelZoom className="leaflet-container">
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          <MapClickListener onClick={handleMapClick} />
-
-          {/* Preview circle */}
-          {formState.centerLat != null && formState.centerLng != null && (
-            <Circle
-              center={[Number(formState.centerLat), Number(formState.centerLng)]}
-              radius={Math.max(10, Number(formState.radiusMeters) || 10)}
-              pathOptions={{ color: '#f59e0b', fillColor: '#f59e0b', fillOpacity: 0.15, weight: 2, dashArray: '8 4' }}
+      {/* ── Active Incident Callout Banner (Top Alert) ── */}
+      {topAlert && activeTab !== 'alerts' && (
+        <aside className="alert-incident-banner" role="alert" aria-live="assertive">
+          <div className="incident-banner-content">
+            <div className="incident-banner-icon">
+              <AlertTriangle size={18} />
+            </div>
+            <div className="incident-banner-text">
+              <strong className="incident-banner-title">
+                {topAlert.type === 'boundary_breach' ? 'Boundary Breach Detected' : 'Route Deviation Detected'}
+              </strong>
+              <span className="incident-banner-desc">{topAlert.message}</span>
+              <span className="incident-banner-time">
+                {new Date(topAlert.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+          </div>
+          <div className="incident-banner-actions">
+            <button
+              type="button"
+              className="incident-action-btn incident-action-btn--view"
+              onClick={() => handleInspectAlertOnMap(topAlert)}
             >
-              <Popup><strong>Preview</strong><br />{formState.label || 'Unnamed'} — {formState.radiusMeters}m</Popup>
-            </Circle>
-          )}
-
-          {/* Saved geofences */}
-          {geofences.map(g => (
-            <Circle
-              key={g.id}
-              center={[g.centerLatitude, g.centerLongitude]}
-              radius={g.radiusMeters}
-              pathOptions={{ color: '#a78bfa', fillColor: '#a78bfa', fillOpacity: 0.12, weight: 2 }}
+              <Crosshair size={13} />
+              <span>View Location</span>
+            </button>
+            <button
+              type="button"
+              className="incident-action-btn incident-action-btn--ack"
+              onClick={() => handleAcknowledgeAlert(topAlert.id)}
             >
-              <Popup><strong>{g.label}</strong><br />{g.centerLatitude.toFixed(4)}, {g.centerLongitude.toFixed(4)}<br />Radius: {g.radiusMeters}m</Popup>
-            </Circle>
-          ))}
+              <Check size={13} />
+              <span>Acknowledge</span>
+            </button>
+          </div>
+        </aside>
+      )}
 
-          {/* Simulated / live device position */}
-          {latest && (
-            <>
+      {/* ── Main Workspace: Two-Column Responsive Layout ── */}
+      <main className={`caretag-main-workspace ${isMapExpanded ? 'caretag-main-workspace--expanded-map' : ''}`}>
+        
+        {/* ── Map Pane (Primary Visual Workspace) ── */}
+        <section className="caretag-map-pane" aria-label="Live Geofence Map">
+          
+          {/* Floating Action Toolbar on Map */}
+          <div className="map-floating-toolbar" role="toolbar" aria-label="Map Controls">
+            <button
+              type="button"
+              className="map-toolbar-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (latest) {
+                  setFlyToTarget({ latlng: [latest.lat, latest.lng], timestamp: Date.now() });
+                  pushToast('Centered map on child location', 'info');
+                } else if (geofences[0]) {
+                  setFlyToTarget({ latlng: [geofences[0].centerLatitude, geofences[0].centerLongitude], timestamp: Date.now() });
+                }
+              }}
+              title="Recenter on Child"
+            >
+              <Crosshair size={15} />
+              <span className="toolbar-btn-text">Recenter</span>
+            </button>
+
+            <button
+              type="button"
+              className="map-toolbar-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (geofences.length > 0) {
+                  setFlyToTarget({ latlng: [geofences[0].centerLatitude, geofences[0].centerLongitude], zoom: 14, timestamp: Date.now() });
+                  pushToast('Fitted to safe places', 'info');
+                } else {
+                  pushToast('No safe places configured yet', 'info');
+                }
+              }}
+              title="Fit Safe Places"
+            >
+              <MapPin size={15} />
+              <span className="toolbar-btn-text">Safe Places</span>
+            </button>
+
+            <button
+              type="button"
+              className={`map-toolbar-btn ${showExpectedRoute ? 'map-toolbar-btn--active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowExpectedRoute(r => !r);
+              }}
+              title="Toggle Learned Route Corridor"
+            >
+              <Navigation size={15} />
+              <span className="toolbar-btn-text">Learned Route</span>
+            </button>
+
+            <button
+              type="button"
+              className="map-toolbar-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsMapExpanded(exp => !exp);
+              }}
+              title={isMapExpanded ? 'Standard Split View' : 'Expand Map'}
+            >
+              {isMapExpanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+              <span className="toolbar-btn-text">{isMapExpanded ? 'Standard' : 'Expand'}</span>
+            </button>
+          </div>
+
+          {/* Leaflet Map Canvas */}
+          <MapContainer
+            center={[mapCenterLat, mapCenterLng]}
+            zoom={14}
+            scrollWheelZoom={true}
+            className="leaflet-map-canvas"
+          >
+            <MapResizeHandler isMapExpanded={isMapExpanded} />
+            <MapClickHandler isMapPickActive={isMapPickActive} onMapClick={handleMapClick} />
+
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              maxZoom={19}
+            />
+
+            <FlyTo target={flyToTarget} />
+
+            {/* Configured Safe Places */}
+            {geofences.map((zone) => {
+              const isSelected = selectedZoneId === zone.id;
+              const isEnabled = zone.enabled !== false && zone.isActive !== false;
+              const isScheduled = isScheduleActive(zone.schedule);
+
+              const color = !isEnabled
+                ? '#94A3B8'
+                : !isScheduled
+                ? '#64748B'
+                : (zone.category === 'home' || (zone.label || '').toLowerCase().includes('home'))
+                ? '#0D9488'
+                : '#2563EB';
+
+              return (
+                <Circle
+                  key={zone.id}
+                  center={[zone.centerLatitude, zone.centerLongitude]}
+                  radius={zone.radiusMeters || 500}
+                  pathOptions={{
+                    color: isSelected ? '#1D4ED8' : color,
+                    fillColor: color,
+                    fillOpacity: isSelected ? 0.30 : isScheduled && isEnabled ? 0.16 : 0.06,
+                    weight: isSelected ? 3.5 : 2,
+                    dashArray: isEnabled && isScheduled ? '4 4' : '8 6',
+                  }}
+                  eventHandlers={{
+                    click: () => {
+                      setSelectedZoneId(zone.id);
+                      setActiveTab('safezones');
+                      setFlyToTarget({ latlng: [zone.centerLatitude, zone.centerLongitude], timestamp: Date.now() });
+                    }
+                  }}
+                >
+                  <Popup>
+                    <div className="map-popup-card">
+                      <div className="map-popup-header">
+                        <MapPin size={14} color={color} />
+                        <strong>{zone.label || zone.name}</strong>
+                      </div>
+                      <p className="map-popup-sub">
+                        Radius: {zone.radiusMeters || 500}m
+                      </p>
+                      <p className="map-popup-sub">
+                        Schedule: {isEnabled ? (isScheduled ? 'Active Monitoring Now' : 'Schedule Inactive') : 'Disabled'}
+                      </p>
+                      <p className="map-popup-coords">
+                        {zone.centerLatitude.toFixed(5)}° N, {zone.centerLongitude.toFixed(5)}° E
+                      </p>
+                    </div>
+                  </Popup>
+                </Circle>
+              );
+            })}
+
+            {/* Draft Zone Circle & Draggable Marker (While creating or editing a safe place) */}
+            {draftZone && draftZone.centerLatitude && draftZone.centerLongitude && (
+              <>
+                <Circle
+                  center={[draftZone.centerLatitude, draftZone.centerLongitude]}
+                  radius={draftZone.radiusMeters || 400}
+                  pathOptions={{
+                    color: '#2563EB',
+                    fillColor: '#3B82F6',
+                    fillOpacity: 0.25,
+                    weight: 3,
+                    dashArray: '6 6',
+                  }}
+                />
+                <Marker
+                  position={[draftZone.centerLatitude, draftZone.centerLongitude]}
+                  icon={draftMarkerIcon}
+                  draggable={true}
+                  eventHandlers={{
+                    dragend: (e) => {
+                      const pos = e.target.getLatLng();
+                      setDraftZone(prev => ({
+                        ...prev,
+                        centerLatitude: pos.lat,
+                        centerLongitude: pos.lng,
+                        _fromMap: true,
+                      }));
+                    }
+                  }}
+                >
+                  <Popup>
+                    <div className="map-popup-card">
+                      <strong>{draftZone.label || 'New Safe Place'}</strong>
+                      <p style={{ fontSize: '0.75rem', color: '#64748B' }}>Drag pin to refine coordinates</p>
+                    </div>
+                  </Popup>
+                </Marker>
+              </>
+            )}
+
+            {/* Learned Route Corridor Polyline */}
+            {showExpectedRoute && routeWaypoints.length >= 2 && (
+              <Polyline
+                positions={routeWaypoints}
+                pathOptions={{
+                  color: '#0D9488',
+                  weight: 3,
+                  opacity: 0.7,
+                  dashArray: '6 8'
+                }}
+              />
+            )}
+
+            {/* Recent Movement Trail */}
+            {recentTrail.length >= 2 && (
+              <Polyline
+                positions={recentTrail}
+                pathOptions={{
+                  color: '#059669',
+                  weight: 3,
+                  opacity: 0.85,
+                }}
+              />
+            )}
+
+            {/* Active Child Position Marker */}
+            {latest && (
               <Marker
                 position={[latest.lat, latest.lng]}
-                icon={pkt?.isAnomaly ? deviceIconAlert : deviceIconNormal}
+                icon={latest?.packet?.isAnomaly ? deviceIconAlert : deviceIconNormal}
               >
                 <Popup>
-                  <strong>{pkt?.deviceKey || 'Device'}</strong><br />
-                  {pkt?.motionState && <span>State: {pkt.motionState}<br /></span>}
-                  {pkt?.deviationScore != null && <span>Deviation: {Number(pkt.deviationScore).toFixed(3)}<br /></span>}
-                  {pkt?.nearestGeofence && <span>Nearest: {pkt.nearestGeofence}<br /></span>}
-                  {pkt?.distToNearestKm != null && <span>Distance: {pkt.distToNearestKm.toFixed(2)} km<br /></span>}
-                  {pkt?.capturedAtUtc && <span>{new Date(pkt.capturedAtUtc).toLocaleTimeString()}</span>}
+                  <div className="map-popup-card">
+                    <div className="map-popup-header">
+                      <ShieldCheck size={14} color="#0D9488" />
+                      <strong>Bhavishya&apos;s Smart Band</strong>
+                    </div>
+                    <p className="map-popup-sub">
+                      Status: {latest.packet?.motionState || 'Normal'}
+                    </p>
+                    <p className="map-popup-sub">
+                      Battery: {latest.packet?.batteryPercent ?? 92}% &bull; Speed: {latest.packet?.speedKph ?? 0} km/h
+                    </p>
+                    <p className="map-popup-coords">
+                      {latest.lat.toFixed(5)}° N, {latest.lng.toFixed(5)}° E
+                    </p>
+                    <p className="map-popup-time">
+                      Updated: {new Date(latest.packet?.capturedAtUtc || Date.now()).toLocaleTimeString()}
+                    </p>
+                  </div>
                 </Popup>
               </Marker>
-              {pkt?.isAnomaly && (
-                <Circle
-                  center={[latest.lat, latest.lng]}
-                  radius={300}
-                  pathOptions={{ color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.08, weight: 2, dashArray: '6 4' }}
-                />
-              )}
-            </>
-          )}
+            )}
+          </MapContainer>
 
-          {flyTo && <FlyTo latlng={flyTo} />}
-        </MapContainer>
-      </div>
+          {/* Map Footer Bar with Source & Attribution */}
+          <footer className="map-footer-status">
+            <span className="map-footer-item">
+              <span className={`status-dot ${
+                simRunning
+                  ? 'status-dot--green'
+                  : hardwareStatus.deviceStatus === DEVICE_STATUS.LIVE
+                  ? 'status-dot--green'
+                  : hardwareStatus.deviceStatus === DEVICE_STATUS.STALE
+                  ? 'status-dot--yellow'
+                  : 'status-dot--neutral'
+              }`} />
+              <strong>Data Source:</strong> {
+                simRunning
+                  ? `Simulation Mode (${activeScenario})`
+                  : hardwareStatus.deviceStatus === DEVICE_STATUS.LIVE
+                  ? 'Live Hardware (Firebase RTDB)'
+                  : hardwareStatus.deviceStatus === DEVICE_STATUS.STALE
+                  ? `Hardware Band (Delayed · ${hardwareStatus.formattedAge})`
+                  : hardwareStatus.deviceStatus === DEVICE_STATUS.WAITING_FOR_DATA
+                  ? 'Smart Band (Awaiting Heartbeat)'
+                  : hardwareStatus.deviceStatus === DEVICE_STATUS.CONNECTION_ERROR
+                  ? 'Firebase RTDB (Connection Error)'
+                  : 'Smart Band Offline'
+              }
+            </span>
+            {latest && (
+              <span className="map-footer-item map-footer-coords">
+                <strong>Coordinates:</strong> {latest.lat.toFixed(4)}°N, {latest.lng.toFixed(4)}°E
+              </span>
+            )}
+          </footer>
+        </section>
 
-      {/* ── Sidebar ── */}
-      <aside className={`sidebar ${!sidebarOpen ? 'sidebar--hidden' : ''}`} aria-label="Controls panel">
-        <div className="sidebar-header">
-          <h2>Control Panel</h2>
-          <button className="sidebar-close-btn" onClick={() => setSidebarOpen(false)} aria-label="Close panel">
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* ── Tab Navigation ── */}
-        <div className="sidebar-tabs">
-          <button className={`tab-btn ${activeTab === 'controls' ? 'tab-btn--active' : ''}`}
-            onClick={() => setActiveTab('controls')}><Shield size={13} /> Controls</button>
-          <button className={`tab-btn ${activeTab === 'alerts' ? 'tab-btn--active' : ''}`}
-            onClick={() => setActiveTab('alerts')}>
-            <Bell size={13} /> Alerts
-            {unackCount > 0 && <span className="tab-badge">{unackCount}</span>}
-          </button>
-          <button className={`tab-btn ${activeTab === 'battery' ? 'tab-btn--active' : ''}`}
-            onClick={() => setActiveTab('battery')}><Battery size={13} /> Battery</button>
-          <button className={`tab-btn ${activeTab === 'progress' ? 'tab-btn--active' : ''}`}
-            onClick={() => setActiveTab('progress')}><BarChart3 size={13} /> Progress</button>
-        </div>
-
-        <div className="sidebar-body">
-
-          {/* ════════════════════════ TAB: Controls ════════════════════════ */}
-          {activeTab === 'controls' && (
-            <>
-              {/* ── Simulation Controls ── */}
-              <section>
-                <p className="section-label">Simulation</p>
-                <div className="sim-controls">
-                  {!simRunning ? (
-                    <button className="btn btn-sim-start" onClick={startSim} disabled={geofences.length === 0}>
-                      <Play size={14} /> Start Simulation
-                    </button>
-                  ) : (
-                    <button className="btn btn-sim-stop" onClick={stopSim}>
-                      <Pause size={14} /> Stop Simulation
-                    </button>
-                  )}
-                  {geofences.length === 0 && (
-                    <p className="form-hint">Create geofences first, then simulate</p>
-                  )}
-                  {simRunning && (
-                    <p className="form-hint" style={{ color: 'var(--success)' }}>
-                      <Radio size={12} /> {simPacketCount} packets generated
-                    </p>
-                  )}
+        {/* ── Contextual Content Pane ── */}
+        <section className="caretag-content-pane" aria-label="Dashboard Views">
+          
+          {/* Guided Setup Wizard */}
+          {showSetupWizard ? (
+            <FirstTimeSetupWizard
+              geofences={geofences}
+              onSaveGeofence={handleSaveGeofence}
+              onCompleteSetup={() => {
+                setShowSetupWizard(false);
+                setActiveTab('overview');
+                localStorage.setItem(`caretag_setup_completed_${userId}`, 'true');
+                pushToast('Setup completed! Live monitoring is active.', 'success');
+              }}
+              currentPacket={latest?.packet}
+              hardwareStatus={hardwareStatus}
+              onDismiss={() => {
+                setShowSetupWizard(false);
+                localStorage.setItem(`caretag_setup_completed_${userId}`, 'true');
+              }}
+              onFlyToZone={(flat, flng) => setFlyToTarget({ latlng: [flat, flng], timestamp: Date.now() })}
+            />
+          ) : activeTab === 'safezones' ? (
+            /* Safe Places Management */
+            <SafeZoneManager
+              geofences={geofences}
+              currentPacket={latest?.packet}
+              onSaveGeofence={handleSaveGeofence}
+              onUpdateGeofence={handleUpdateGeofence}
+              onDeleteGeofence={handleDeleteGeofence}
+              onFlyToZone={(flat, flng) => setFlyToTarget({ latlng: [flat, flng], timestamp: Date.now() })}
+              selectedZoneId={selectedZoneId}
+              onSelectZone={setSelectedZoneId}
+              draftZone={draftZone}
+              setDraftZone={setDraftZone}
+              isMapPickActive={isMapPickActive}
+              setIsMapPickActive={setIsMapPickActive}
+              onClose={() => setActiveTab('overview')}
+            />
+          ) : activeTab === 'inspector' ? (
+            /* Technical Inspector & Capstone Evaluator */
+            <TechnicalInspector
+              packet={latest?.packet}
+              geofences={geofences}
+              hardwareStatus={hardwareStatus}
+              simRunning={simRunning}
+              activeScenario={activeScenario}
+              onStartScenario={handleStartScenario}
+              onStopScenario={handleStopScenario}
+              onResetScenario={handleResetScenario}
+              onManualSimulate={handleManualSimulate}
+              routineHistory={routineHistory}
+              routineProfile={routineProfile}
+              evaluationLog={evaluationLog}
+              simulatedAlerts={simulatedAlerts}
+              onClose={() => setActiveTab('overview')}
+            />
+          ) : activeTab === 'alerts' ? (
+            /* Safety Alerts & Event Log */
+            <div className="alerts-history-view">
+              <div className="alerts-view-header">
+                <div className="alerts-view-title-group">
+                  <Bell size={18} className="text-teal" />
+                  <h2>Safety Alerts &amp; Event Log</h2>
                 </div>
-              </section>
-
-              {/* ── Voice Alarm Toggle ── */}
-              <section>
-                <p className="section-label">Voice Alarm</p>
-                <div className="voice-alarm-control">
-                  <button className={`btn ${voiceEnabled ? 'btn-voice-on' : 'btn-voice-off'}`} onClick={handleToggleVoice}>
-                    {voiceEnabled ? <><Volume2 size={14} /> Voice Alarm ON</> : <><VolumeX size={14} /> Voice Alarm OFF</>}
-                  </button>
-                  <p className="form-hint">
-                    {voiceEnabled ? 'Audible warnings will sound on anomalies' : 'Voice warnings are muted'}
-                  </p>
-                </div>
-              </section>
-
-              {/* ── Create Geofence ── */}
-              <section>
-                <p className="section-label">Create Geofence</p>
-                <form className="geofence-form" onSubmit={handleSaveGeofence} noValidate>
-                  <div className="form-group">
-                    <label htmlFor="geo-label">Label</label>
-                    <input
-                      id="geo-label"
-                      type="text"
-                      placeholder="e.g., Home, School, Office"
-                      className={formErrors.label ? 'input-error' : ''}
-                      value={formState.label}
-                      onChange={e => { setFormState(s => ({ ...s, label: e.target.value })); setFormErrors(f => ({ ...f, label: undefined })); }}
-                    />
-                    {formErrors.label && <span className="form-error">{formErrors.label}</span>}
-                  </div>
-
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label htmlFor="geo-lat">Latitude</label>
-                      <input
-                        id="geo-lat" type="number" step="any" placeholder="30.3398"
-                        className={formErrors.centerLat ? 'input-error' : ''}
-                        value={formState.centerLat}
-                        onChange={e => setFormState(s => ({ ...s, centerLat: e.target.value }))}
-                      />
-                      {formErrors.centerLat && <span className="form-error">{formErrors.centerLat}</span>}
-                    </div>
-                    <div className="form-group">
-                      <label htmlFor="geo-lng">Longitude</label>
-                      <input
-                        id="geo-lng" type="number" step="any" placeholder="76.3869"
-                        className={formErrors.centerLng ? 'input-error' : ''}
-                        value={formState.centerLng}
-                        onChange={e => setFormState(s => ({ ...s, centerLng: e.target.value }))}
-                      />
-                      {formErrors.centerLng && <span className="form-error">{formErrors.centerLng}</span>}
-                    </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="geo-radius">Radius (meters)</label>
-                    <input
-                      id="geo-radius" type="number" min="1" placeholder="500"
-                      className={formErrors.radiusMeters ? 'input-error' : ''}
-                      value={formState.radiusMeters}
-                      onChange={e => setFormState(s => ({ ...s, radiusMeters: e.target.value }))}
-                    />
-                    {formErrors.radiusMeters && <span className="form-error">{formErrors.radiusMeters}</span>}
-                  </div>
-
-                  <button type="submit" className="btn btn-primary" disabled={saving}>
-                    {saving ? <><span className="spinner" /> Saving…</> : <><Crosshair size={14} /> Save Geofence</>}
-                  </button>
-                  <p className="form-hint"><MapPin size={12} /> Click the map to set coordinates</p>
-                </form>
-              </section>
-
-              {/* ── Saved Geofences ── */}
-              <section>
-                <p className="section-label">Saved Geofences ({geofences.length})</p>
-                {geofencesLoading ? (
-                  <div className="empty-state"><span className="spinner" /></div>
-                ) : geofences.length === 0 ? (
-                  <div className="empty-state">
-                    <MapPin size={28} />
-                    <p>No geofences yet.<br />Click the map and create one above.</p>
-                  </div>
-                ) : (
-                  <div className="geofence-list">
-                    {geofences.map(g => (
-                      <div key={g.id} className="geofence-card">
-                        <div className="geofence-card-info">
-                          <div className="geofence-card-name">{g.label}</div>
-                          <div className="geofence-card-coords">
-                            {g.centerLatitude.toFixed(4)}, {g.centerLongitude.toFixed(4)} · {g.radiusMeters}m
-                          </div>
-                        </div>
-                        <div className="geofence-card-actions">
-                          <button className="btn btn-ghost" title={`Zoom to ${g.label}`}
-                            onClick={() => { setFlyTo([g.centerLatitude, g.centerLongitude]); pushToast(`Zoomed to ${g.label}`); }}>
-                            <ChevronRight size={14} />
-                          </button>
-                          <button className="btn btn-danger-ghost" title={`Delete ${g.label}`}
-                            onClick={() => setConfirmDelete({ id: g.id, label: g.label })}>
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              {/* ── Device Telemetry ── */}
-              {pkt && (
-                <section>
-                  <p className="section-label">Device Telemetry</p>
-                  <div className="device-info">
-                    <div className="device-info-item">
-                      <div className="device-info-label">Device</div>
-                      <div className="device-info-value">{pkt.deviceKey || '—'}</div>
-                    </div>
-                    <div className="device-info-item">
-                      <div className="device-info-label">Phase</div>
-                      <div className="device-info-value">{pkt.phase || pkt.motionState || '—'}</div>
-                    </div>
-                    <div className="device-info-item">
-                      <div className="device-info-label">Speed</div>
-                      <div className="device-info-value">{pkt.speedKph != null ? `${Number(pkt.speedKph).toFixed(1)} km/h` : '—'}</div>
-                    </div>
-                    <div className="device-info-item">
-                      <div className="device-info-label">Deviation</div>
-                      <div className={`device-info-value ${scoreClass}`}>
-                        {devScore !== null ? devScore.toFixed(3) : '—'}
-                      </div>
-                    </div>
-                    {pkt.nearestGeofence && (
-                      <div className="device-info-item">
-                        <div className="device-info-label">Nearest</div>
-                        <div className="device-info-value">{pkt.nearestGeofence}</div>
-                      </div>
-                    )}
-                    {pkt.distToNearestKm != null && (
-                      <div className="device-info-item">
-                        <div className="device-info-label">Distance</div>
-                        <div className={`device-info-value ${pkt.distToNearestKm > 2 ? 'value-bad' : pkt.distToNearestKm > 0.5 ? 'value-warn' : 'value-good'}`}>
-                          {pkt.distToNearestKm.toFixed(2)} km
-                        </div>
-                      </div>
-                    )}
-                    {pkt.batteryPercent != null && (
-                      <div className="device-info-item">
-                        <div className="device-info-label">Battery</div>
-                        <div className={`device-info-value ${Number(pkt.batteryPercent) < 20 ? 'value-bad' : 'value-good'}`}>
-                          {pkt.batteryPercent}%
-                        </div>
-                      </div>
-                    )}
-                    {pkt.capturedAtUtc && (
-                      <div className="device-info-item">
-                        <div className="device-info-label">Last Seen</div>
-                        <div className="device-info-value" style={{ fontSize: '0.75rem' }}>
-                          {new Date(pkt.capturedAtUtc).toLocaleTimeString()}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </section>
-              )}
-            </>
-          )}
-
-          {/* ════════════════════════ TAB: Alerts ════════════════════════ */}
-          {activeTab === 'alerts' && (
-            <section>
-              <div className="section-header-row">
-                <p className="section-label">Alert History</p>
-                {alerts.length > 0 && (
-                  <button className="btn btn-ghost btn-sm" onClick={handleAckAll}>
-                    <Eye size={12} /> Mark All Read
+                {alerts.some(a => !a.acknowledged) && (
+                  <button
+                    type="button"
+                    className="alerts-ack-all-btn"
+                    onClick={handleAcknowledgeAll}
+                  >
+                    <Check size={13} />
+                    <span>Acknowledge All</span>
                   </button>
                 )}
               </div>
 
               {alerts.length === 0 ? (
-                <div className="empty-state">
-                  <Bell size={28} />
-                  <p>No alerts yet.<br />Alerts will appear when anomalies are detected during simulation.</p>
+                <div className="alerts-empty-card">
+                  <CheckCircle size={32} color="#0D9488" />
+                  <h3>No Incidents Recorded</h3>
+                  <p>All recorded journeys have adhered to normal routines and designated safe boundaries.</p>
                 </div>
               ) : (
-                <div className="alert-list">
-                  {alerts.map(a => (
-                    <div key={a.id} className={`alert-card ${!a.acknowledged ? 'alert-card--unread' : ''} alert-card--${a.type}`}>
-                      <div className="alert-card-icon">
-                        {a.type === 'out_of_zone' ? <ShieldAlert size={16} /> :
-                         a.type === 'low_battery' ? <BatteryLow size={16} /> :
-                         <AlertTriangle size={16} />}
+                <div className="alerts-list">
+                  {alerts.map((item) => (
+                    <div
+                      key={item.id}
+                      className={`alert-list-card ${item.acknowledged ? 'alert-list-card--ack' : 'alert-list-card--unack'}`}
+                    >
+                      <div className="alert-card-top">
+                        <span className={`alert-type-badge alert-type-badge--${item.type}`}>
+                          {item.type === 'boundary_breach' ? 'Boundary Breach' : item.type === 'route_deviation' ? 'Route Deviation' : 'Nominal Safety'}
+                        </span>
+                        <span className="alert-card-time">
+                          <Clock size={12} />
+                          {new Date(item.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                        </span>
                       </div>
-                      <div className="alert-card-body">
-                        <div className="alert-card-type">
-                          {a.type === 'out_of_zone' ? 'Out of Safety Zone' :
-                           a.type === 'low_battery' ? 'Low Battery' : 'Anomaly Detected'}
+                      <p className="alert-card-message">{item.message}</p>
+                      <div className="alert-card-bottom">
+                        <div className="alert-card-meta">
+                          {item.nearestGeofence && <span>Near: <strong>{item.nearestGeofence}</strong></span>}
+                          {item.latitude && <span>Coords: {item.latitude.toFixed(4)}, {item.longitude.toFixed(4)}</span>}
+                          {item.source && <span className="alert-source-tag">{item.source === 'simulation' ? 'Simulation' : 'Hardware'}</span>}
                         </div>
-                        <div className="alert-card-detail">{a.message}</div>
-                        <div className="alert-card-time">
-                          <Clock size={10} /> {new Date(a.timestamp).toLocaleString()}
+                        <div className="alert-card-actions">
+                          {item.latitude && (
+                            <button
+                              type="button"
+                              className="alert-btn-map"
+                              onClick={() => handleInspectAlertOnMap(item)}
+                            >
+                              <Crosshair size={12} />
+                              <span>Inspect</span>
+                            </button>
+                          )}
+                          {!item.acknowledged && (
+                            <button
+                              type="button"
+                              className="alert-btn-ack"
+                              onClick={() => handleAcknowledgeAlert(item.id)}
+                            >
+                              <Check size={12} />
+                              <span>Acknowledge</span>
+                            </button>
+                          )}
                         </div>
                       </div>
-                      {!a.acknowledged && (
-                        <button className="btn btn-ghost btn-sm" onClick={() => handleAckAlert(a.id)} title="Acknowledge">
-                          <CheckCircle size={14} />
-                        </button>
-                      )}
                     </div>
                   ))}
                 </div>
               )}
-            </section>
+            </div>
+          ) : (
+            /* Caregiver Home (Answering the 4 Core Questions) */
+            <CaregiverOverview
+              packet={latest?.packet}
+              geofences={geofences}
+              alerts={alerts}
+              hardwareStatus={hardwareStatus}
+              simRunning={simRunning}
+              isLiveHardwareMode={isLiveHardwareMode}
+              onRecenterMap={() => {
+                if (latest) setFlyToTarget({ latlng: [latest.lat, latest.lng], timestamp: Date.now() });
+              }}
+              onAcknowledgeAlert={handleAcknowledgeAlert}
+              onOpenSafeZones={() => setActiveTab('safezones')}
+              onOpenTechInspector={() => setActiveTab('inspector')}
+            />
           )}
 
-          {/* ════════════════════════ TAB: Battery ════════════════════════ */}
-          {activeTab === 'battery' && (
-            <section>
-              <p className="section-label">Battery Statistics</p>
+        </section>
+      </main>
 
-              {batStats.current === null ? (
-                <div className="empty-state">
-                  <Battery size={28} />
-                  <p>No battery data yet.<br />Start simulation to begin tracking battery.</p>
-                </div>
-              ) : (
-                <>
-                  {/* Battery gauge */}
-                  <div className="battery-gauge">
-                    <div className="battery-gauge-ring">
-                      <svg viewBox="0 0 120 120" width="120" height="120">
-                        <circle cx="60" cy="60" r="52" fill="none" stroke="var(--border)" strokeWidth="8" />
-                        <circle cx="60" cy="60" r="52" fill="none"
-                          stroke={batStats.current < 20 ? 'var(--danger)' : batStats.current < 50 ? 'var(--warning-text)' : 'var(--success)'}
-                          strokeWidth="8"
-                          strokeDasharray={`${(batStats.current / 100) * 327} 327`}
-                          strokeLinecap="round"
-                          transform="rotate(-90 60 60)"
-                        />
-                      </svg>
-                      <div className="battery-gauge-text">
-                        <span className="battery-gauge-value">{batStats.current}</span>
-                        <span className="battery-gauge-unit">%</span>
-                      </div>
-                    </div>
-                    <div className="battery-gauge-label">Current Battery</div>
-                  </div>
-
-                  {/* Battery stats grid */}
-                  <div className="device-info">
-                    <div className="device-info-item">
-                      <div className="device-info-label">Average</div>
-                      <div className="device-info-value">{batStats.avg}%</div>
-                    </div>
-                    <div className="device-info-item">
-                      <div className="device-info-label">Minimum</div>
-                      <div className={`device-info-value ${batStats.min < 20 ? 'value-bad' : 'value-good'}`}>{batStats.min}%</div>
-                    </div>
-                    <div className="device-info-item">
-                      <div className="device-info-label">Low Events</div>
-                      <div className={`device-info-value ${batStats.lowEvents > 0 ? 'value-bad' : 'value-good'}`}>{batStats.lowEvents}</div>
-                    </div>
-                    <div className="device-info-item">
-                      <div className="device-info-label">Trend</div>
-                      <div className={`device-info-value ${batStats.trend === 'decreasing' ? 'value-bad' : batStats.trend === 'increasing' ? 'value-good' : ''}`}>
-                        {batStats.trend === 'decreasing' ? <><TrendingDown size={12} /> Decreasing</> :
-                         batStats.trend === 'increasing' ? <><TrendingUp size={12} /> Increasing</> : 'Stable'}
-                      </div>
-                    </div>
-                    <div className="device-info-item">
-                      <div className="device-info-label">Readings</div>
-                      <div className="device-info-value">{batStats.totalReadings}</div>
-                    </div>
-                  </div>
-
-                  {/* Sparkline */}
-                  {batStats.recentReadings.length > 1 && (
-                    <div className="battery-sparkline">
-                      <p className="section-label" style={{ fontSize: '0.7rem', marginBottom: '4px' }}>Recent Trend</p>
-                      <Sparkline
-                        data={batStats.recentReadings.map(r => r.value)}
-                        width={280}
-                        height={50}
-                        color={batStats.current < 20 ? '#ef4444' : '#10b981'}
-                      />
-                    </div>
-                  )}
-                </>
-              )}
-            </section>
-          )}
-
-          {/* ════════════════════════ TAB: Progress ════════════════════════ */}
-          {activeTab === 'progress' && (
-            <section>
-              <p className="section-label">Progress (8 Months)</p>
-
-              {monthsWithData === 0 ? (
-                <div className="empty-state">
-                  <BarChart3 size={28} />
-                  <p>No historical data yet.<br />Progress data will accumulate as you use the simulation over time.</p>
-                </div>
-              ) : (
-                <>
-                  {monthsWithData < 2 && (
-                    <div className="info-banner">
-                      <Clock size={14} />
-                      Insufficient history for trend comparison. Data will accumulate over time.
-                    </div>
-                  )}
-                  <div className="progress-table">
-                    <div className="progress-header">
-                      <span>Month</span>
-                      <span>Alerts</span>
-                      <span>Breaches</span>
-                      <span>Anomalies</span>
-                      <span>Bat. Avg</span>
-                    </div>
-                    {progress.map(p => (
-                      <div key={p.month} className={`progress-row ${!p.hasData ? 'progress-row--empty' : ''} ${p.month === progress[progress.length - 1].month ? 'progress-row--current' : ''}`}>
-                        <span className="progress-month">{p.label}</span>
-                        <span>{p.hasData ? p.alerts : '—'}</span>
-                        <span className={p.breaches > 0 ? 'value-bad' : ''}>{p.hasData ? p.breaches : '—'}</span>
-                        <span className={p.anomalies > 0 ? 'value-warn' : ''}>{p.hasData ? p.anomalies : '—'}</span>
-                        <span>{p.batteryAvg != null ? `${p.batteryAvg}%` : '—'}</span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </section>
-          )}
-
-        </div>
-      </aside>
+      {/* ── Toast Notifications System ── */}
+      <div className="caretag-toast-container" aria-live="polite">
+        {toasts.map(t => (
+          <div key={t.id} className={`caretag-toast caretag-toast--${t.type}`}>
+            {t.type === 'error' && <AlertTriangle size={15} />}
+            {t.type === 'success' && <CheckCircle size={15} />}
+            {t.type === 'info' && <Radio size={15} />}
+            <span>{t.text}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

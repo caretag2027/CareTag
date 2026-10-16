@@ -1,0 +1,832 @@
+/* ──────────────────────────────────────────────────────────────
+   CareTag Taggy AI Chatbot — Caregiver-First Interface
+   Brand Colors: Deep Navy #0B2D5B, Space Navy #061A33, Teal #14B8A6, Blue #2563EB
+   Theme: Crisp Light Feed with Brand Navy Header & Accents
+   ────────────────────────────────────────────────────────────── */
+
+.taggy-bot-root {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 99999;
+  font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ── Minimal Floating Launcher ── */
+.taggy-launcher-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.taggy-launcher-callout {
+  background: #0B2D5B;
+  border: 1.5px solid #14B8A6;
+  color: #FFFFFF;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(11, 45, 91, 0.35), 0 0 14px rgba(20, 184, 166, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  backdrop-filter: blur(12px);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.taggy-launcher-callout:hover {
+  transform: translateY(-2px);
+  border-color: #38BDF8;
+}
+
+.taggy-launcher-callout .sparkle-icon {
+  color: #14B8A6;
+}
+
+.taggy-launcher-callout .callout-close-icon {
+  opacity: 0.6;
+  margin-left: 3px;
+  transition: opacity 0.15s ease;
+}
+
+.taggy-launcher-callout .callout-close-icon:hover {
+  opacity: 1;
+}
+
+.taggy-launcher-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #1A4278 0%, #0B2D5B 70%, #061A33 100%);
+  border: 2.5px solid #0B2D5B;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-shadow: 0 10px 25px rgba(11, 45, 91, 0.35), 0 0 15px rgba(20, 184, 166, 0.3);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
+}
+
+.taggy-launcher-btn:hover {
+  transform: scale(1.08) translateY(-2px);
+  box-shadow: 0 14px 30px rgba(11, 45, 91, 0.45), 0 0 24px rgba(20, 184, 166, 0.45);
+}
+
+.taggy-launcher-btn:active {
+  transform: scale(0.95);
+}
+
+.taggy-launcher-img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.25));
+  transition: transform 0.3s ease;
+}
+
+.taggy-launcher-btn:hover .taggy-launcher-img {
+  transform: rotate(-5deg) scale(1.04);
+}
+
+.taggy-live-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 13px;
+  height: 13px;
+  background: #10B981;
+  border: 2.5px solid #FFFFFF;
+  border-radius: 50%;
+  box-shadow: 0 0 6px #10B981;
+}
+
+.taggy-live-badge.offline {
+  background: #94A3B8;
+  box-shadow: none;
+}
+
+/* ── Light Theme Chat Window ── */
+.taggy-chat-window {
+  width: 390px;
+  max-width: calc(100vw - 28px);
+  height: 560px;
+  max-height: calc(100vh - 80px);
+  background: #FFFFFF;
+  border: 2px solid #0B2D5B;
+  border-radius: 20px;
+  box-shadow: 0 18px 45px rgba(11, 45, 91, 0.22), 0 4px 12px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: taggyFadeScale 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition: width 0.25s ease, height 0.25s ease;
+}
+
+/* Expanded Reader Mode (For Comfortable Reading) */
+.taggy-chat-window.taggy-window--expanded {
+  width: 530px;
+  max-width: calc(100vw - 28px);
+  height: 640px;
+  max-height: calc(100vh - 40px);
+}
+
+/* ── Compact Header (Brand Dark Navy) ── */
+.taggy-chat-header {
+  padding: 10px 14px;
+  background: #0B2D5B;
+  border-bottom: 1.5px solid #0B2D5B;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.taggy-header-info {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.taggy-avatar-frame {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #1A4278 0%, #061A33 100%);
+  border: 1.5px solid #14B8A6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.taggy-avatar-frame img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.taggy-header-text h3 {
+  margin: 0;
+  font-size: 0.90rem;
+  font-weight: 700;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.2;
+}
+
+.taggy-role-tag {
+  color: #14B8A6;
+  background: rgba(20, 184, 166, 0.15);
+  font-size: 0.64rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(20, 184, 166, 0.3);
+}
+
+.taggy-header-text .status-line {
+  margin: 2px 0 0;
+  font-size: 0.67rem;
+  color: #93C5FD;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.taggy-header-text .dot-online {
+  width: 6px;
+  height: 6px;
+  background: #10B981;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 5px #10B981;
+  flex-shrink: 0;
+}
+
+.taggy-header-text .dot-online.dot-offline {
+  background: #94A3B8;
+  box-shadow: none;
+}
+
+.taggy-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.taggy-icon-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #FFFFFF;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.taggy-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+  transform: scale(1.05);
+}
+
+/* ── Dedicated Scrollable Messages Feed ── */
+.taggy-messages-feed {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 14px 10px;
+  background: #F8FAFC;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(11, 45, 91, 0.2) transparent;
+}
+
+.taggy-messages-feed::-webkit-scrollbar {
+  width: 4px;
+}
+
+.taggy-messages-feed::-webkit-scrollbar-thumb {
+  background: rgba(11, 45, 91, 0.2);
+  border-radius: 4px;
+}
+
+.taggy-msg-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  animation: taggyFadeIn 0.2s ease forwards;
+}
+
+.taggy-msg-row.user {
+  flex-direction: row-reverse;
+}
+
+.taggy-msg-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.taggy-msg-avatar.bot {
+  background: #FFFFFF;
+  border: 1.5px solid #0B2D5B;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.taggy-msg-avatar.bot img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+.taggy-msg-avatar.user {
+  background: #0B2D5B;
+  color: #FFFFFF;
+}
+
+.taggy-msg-content-wrap {
+  max-width: 86%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.taggy-msg-row.user .taggy-msg-content-wrap {
+  align-items: flex-end;
+}
+
+.taggy-msg-bubble {
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 0.83rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Bot Bubble: Clean White with subtle border */
+.taggy-msg-row.bot .taggy-msg-bubble {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  color: #0F172A;
+  border-top-left-radius: 3px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+/* User Bubble: Brand Navy */
+.taggy-msg-row.user .taggy-msg-bubble {
+  background: #0B2D5B;
+  color: #FFFFFF;
+  border-top-right-radius: 3px;
+  box-shadow: 0 2px 6px rgba(11, 45, 91, 0.25);
+}
+
+.taggy-msg-time {
+  font-size: 0.65rem;
+  color: #94A3B8;
+  padding: 0 4px;
+}
+
+/* ── Caregiver Markdown Typography ── */
+.taggy-md p {
+  margin: 0 0 7px 0;
+}
+
+.taggy-md p:last-child {
+  margin-bottom: 0;
+}
+
+.taggy-md .taggy-line-gap {
+  height: 6px;
+}
+
+.taggy-md-h {
+  margin: 8px 0 4px 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #0B2D5B;
+}
+
+.taggy-bullet-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 4px;
+  color: #334155;
+  font-size: 0.81rem;
+  line-height: 1.45;
+}
+
+.taggy-bullet-dot {
+  color: #14B8A6;
+  font-size: 0.95rem;
+  line-height: 1.1;
+}
+
+.taggy-numbered-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-bottom: 5px;
+  color: #334155;
+  font-size: 0.81rem;
+  line-height: 1.45;
+}
+
+.taggy-number-badge {
+  background: #EFF6FF;
+  color: #0B2D5B;
+  border: 1px solid #BFDBFE;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.67rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.taggy-md strong {
+  color: #0B2D5B;
+  font-weight: 600;
+}
+
+.taggy-msg-row.user .taggy-md strong {
+  color: #FFFFFF;
+}
+
+.taggy-md code {
+  background: #F1F5F9;
+  border: 1px solid #CBD5E1;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.77rem;
+  color: #0B2D5B;
+}
+
+/* ── Collapsible Technical Disclosure ── */
+.taggy-tech-disclosure {
+  margin-top: 9px;
+  border: 1px solid #CBD5E1;
+  background: #F8FAFC;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.taggy-tech-disclosure.is-expanded {
+  border-color: #94A3B8;
+  background: #F1F5F9;
+}
+
+.taggy-tech-toggle-btn {
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 7px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  color: #475569;
+  font-size: 0.73rem;
+  font-weight: 600;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.taggy-tech-toggle-btn:hover {
+  background: #E2E8F0;
+  color: #0B2D5B;
+}
+
+.taggy-tech-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.taggy-tech-icon {
+  color: #0B2D5B;
+  opacity: 0.7;
+}
+
+.taggy-tech-action {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #2563EB;
+  font-size: 0.70rem;
+}
+
+.taggy-chevron {
+  transition: transform 0.2s ease;
+}
+
+.taggy-chevron.rotated {
+  transform: rotate(180deg);
+}
+
+.taggy-tech-content {
+  padding: 8px 10px 10px;
+  border-top: 1px solid #E2E8F0;
+  background: #FFFFFF;
+  font-size: 0.78rem;
+  color: #334155;
+  animation: taggyFadeIn 0.2s ease;
+}
+
+.taggy-inspector-btn {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #0B2D5B;
+  color: #FFFFFF;
+  border: none;
+  padding: 4px 9px;
+  border-radius: 5px;
+  font-size: 0.70rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.taggy-inspector-btn:hover {
+  background: #2563EB;
+}
+
+/* ── Contextual Quick Action Pill ── */
+.taggy-msg-action-pill-wrap {
+  margin-top: 8px;
+  display: flex;
+}
+
+.taggy-action-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #F0FDF4;
+  border: 1px solid #86EFAC;
+  color: #166534;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.taggy-action-pill-btn:hover {
+  background: #DCFCE7;
+  border-color: #22C55E;
+  transform: translateX(2px);
+}
+
+/* ── Micro Copy Action ── */
+.taggy-msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.taggy-copy-btn {
+  background: transparent;
+  border: none;
+  color: #94A3B8;
+  font-size: 0.65rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 3px;
+  transition: all 0.15s ease;
+}
+
+.taggy-copy-btn:hover {
+  color: #0B2D5B;
+}
+
+/* ── Suggested Starter Questions (Caregiver-Focused) ── */
+.taggy-front-questions {
+  margin: 4px 0 6px;
+  width: 100%;
+}
+
+.front-questions-header {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #0B2D5B;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 7px;
+  padding: 0 2px;
+}
+
+.sparkle-gold {
+  color: #D97706;
+}
+
+.front-questions-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.front-question-card {
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  border-radius: 9px;
+  padding: 8px 11px;
+  display: flex;
+  align-items: center;
+  color: #0B2D5B;
+  font-size: 0.77rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.front-question-card:hover {
+  border-color: #0B2D5B;
+  background: #F0F7FF;
+  transform: translateX(2px);
+  box-shadow: 0 3px 8px rgba(11, 45, 91, 0.1);
+}
+
+.front-question-card:active {
+  transform: scale(0.99);
+}
+
+.front-question-card .q-text {
+  line-height: 1.3;
+}
+
+/* ── Typing Indicator ── */
+.taggy-msg-bubble--typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.taggy-typing-dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.taggy-dot {
+  width: 5px;
+  height: 5px;
+  background: #0B2D5B;
+  border-radius: 50%;
+  animation: taggyDotPulse 1.2s infinite ease-in-out;
+}
+
+.taggy-dot:nth-child(1) { animation-delay: 0s; }
+.taggy-dot:nth-child(2) { animation-delay: 0.2s; }
+.taggy-dot:nth-child(3) { animation-delay: 0.4s; }
+
+.taggy-typing-text {
+  font-size: 0.73rem;
+  color: #64748B;
+}
+
+/* ── Anchored Composer Footer (Never Covers Messages) ── */
+.taggy-chat-footer {
+  padding: 9px 12px 10px;
+  background: #FFFFFF;
+  border-top: 1px solid #E2E8F0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.taggy-footer-q-toggle {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1px;
+}
+
+.taggy-toggle-q-btn {
+  background: #F1F5F9;
+  border: 1px solid #CBD5E1;
+  border-radius: 999px;
+  font-size: 0.67rem;
+  font-weight: 600;
+  color: #0B2D5B;
+  padding: 3px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.taggy-toggle-q-btn:hover {
+  background: #E2E8F0;
+  border-color: #0B2D5B;
+}
+
+.taggy-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #F1F5F9;
+  border: 1.5px solid #CBD5E1;
+  border-radius: 999px;
+  padding: 3px 4px 3px 13px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.taggy-input-row:focus-within {
+  border-color: #0B2D5B;
+  background: #FFFFFF;
+  box-shadow: 0 0 0 3px rgba(11, 45, 91, 0.1);
+}
+
+.taggy-chat-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #0F172A;
+  font-family: inherit;
+  font-size: 0.83rem;
+  padding: 6px 0;
+}
+
+.taggy-chat-input::placeholder {
+  color: #94A3B8;
+}
+
+.taggy-send-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #0B2D5B;
+  border: none;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.taggy-send-btn:hover:not(:disabled) {
+  background: #2563EB;
+  transform: scale(1.06);
+}
+
+.taggy-send-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.taggy-footer-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.63rem;
+  color: #64748B;
+  padding: 0 3px;
+}
+
+/* ── Keyframes ── */
+@keyframes taggyFadeScale {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes taggyFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes taggyDotPulse {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ── Mobile Optimization ── */
+@media (max-width: 480px) {
+  .taggy-bot-root {
+    bottom: 12px;
+    right: 12px;
+    left: 12px;
+  }
+
+  .taggy-chat-window,
+  .taggy-chat-window.taggy-window--expanded {
+    width: 100%;
+    max-width: 100%;
+    height: calc(100dvh - 24px);
+    max-height: 560px;
+    border-radius: 18px;
+    border: 2px solid #0B2D5B;
+  }
+
+  .taggy-launcher-callout {
+    display: none;
+  }
+
+  .front-question-card {
+    padding: 8px 10px;
+    font-size: 0.75rem;
+  }
+
+  .taggy-chat-input {
+    font-size: 16px; /* Prevents auto-zoom on iOS Safari */
+  }
+}

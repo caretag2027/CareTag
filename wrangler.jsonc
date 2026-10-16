@@ -23,5 +23,16 @@
       "binding": "CARETAG_KV",
       "id": "f2b433a0757c4517bf4e73298cbb5b54"
     }
-  ]
+  ],
+  "vars": {
+    "FIREBASE_API_KEY": "AIzaSyA8fyc0kRAsNV1hRcI4g-bkdFd34GOW5Nk",
+    "FIREBASE_AUTH_DOMAIN": "smart-band-7de19.firebaseapp.com",
+    "FIREBASE_DATABASE_URL": "https://smart-band-7de19-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "FIREBASE_PROJECT_ID": "smart-band-7de19",
+    "FIREBASE_STORAGE_BUCKET": "smart-band-7de19.firebasestorage.app",
+    "FIREBASE_MESSAGING_SENDER_ID": "673896145526",
+    "FIREBASE_APP_ID": "1:673896145526:web:199737a1183586dfb6f557",
+    "FIREBASE_MEASUREMENT_ID": "G-9M1VLF71W2",
+    "FIREBASE_USER_UID": "V68ovsSKeqRlyIdh2xoJV7EizVq1"
+  }
 }

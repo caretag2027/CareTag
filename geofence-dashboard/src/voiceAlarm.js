@@ -27,8 +27,8 @@ class VoiceAlarm {
   // ── Settings ──
 
   _loadEnabled() {
-    try { return localStorage.getItem(SETTING_KEY) !== 'false'; }
-    catch { return true; }
+    try { return localStorage.getItem(SETTING_KEY) === 'true'; }
+    catch { return false; }
   }
 
   isEnabled() {

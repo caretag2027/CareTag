@@ -1,42 +1,57 @@
 /**
  * CareTag Alert Store
  * 
- * Persists anomaly events, geofence breaches, and low-battery alerts
- * in localStorage, scoped per user. Provides retrieval and acknowledgment.
+ * Persists and manages safety events scoped per user and device.
+ * Supported event categories (as specified in CareTag requirements):
+ *   1. nominal_safety  — device is reporting normally, no safety exception (informational)
+ *   2. boundary_breach — device has left an actively monitored safe place
+ *   3. route_deviation — device has deviated materially from learned expected corridor
  */
 
 import { userKey } from './auth';
 
 const MAX_ALERTS = 500; // cap per user
 
-/**
- * Alert types:
- *   out_of_zone  — device left all geofence radii
- *   anomaly      — deviation score exceeded threshold
- *   low_battery  — battery dropped below 20%
- */
+export const ALERT_CATEGORIES = {
+  NOMINAL: 'nominal_safety',
+  BREACH: 'boundary_breach',
+  DEVIATION: 'route_deviation',
+};
 
 /**
- * Save a new alert event.
+ * Save a new safety event.
  * @param {string} userId
- * @param {{ type: string, latitude: number, longitude: number, nearestGeofence?: string, distance?: number, deviationScore?: number, message: string }} data
- * @returns {object} the saved alert
+ * @param {Object} data
+ * @returns {Object} the saved event
  */
 export function saveAlert(userId, data) {
   const key = userKey(userId, 'alerts');
   const alerts = loadAlerts(userId);
 
+  // Normalize category to standard 3 categories
+  let category = ALERT_CATEGORIES.BREACH;
+  if (data.type === 'nominal' || data.type === 'nominal_safety') {
+    category = ALERT_CATEGORIES.NOMINAL;
+  } else if (data.type === 'deviation' || data.type === 'route_deviation' || data.type === 'anomaly') {
+    category = ALERT_CATEGORIES.DEVIATION;
+  } else if (data.type === 'breach' || data.type === 'boundary_breach' || data.type === 'out_of_zone') {
+    category = ALERT_CATEGORIES.BREACH;
+  }
+
   const alert = {
-    id: `alert-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-    type: data.type || 'anomaly',
-    timestamp: new Date().toISOString(),
+    id: data.id || `alert-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    type: category,
+    category,
+    timestamp: data.timestamp || new Date().toISOString(),
+    deviceId: data.deviceId || data.deviceKey || 'SMART-BAND-01',
     latitude: data.latitude,
     longitude: data.longitude,
-    nearestGeofence: data.nearestGeofence || null,
-    distance: data.distance || null,
-    deviationScore: data.deviationScore || null,
-    message: data.message || 'Alert triggered',
-    acknowledged: false,
+    nearestGeofence: data.nearestGeofence || data.nearestZone || null,
+    distanceMeters: data.distanceMeters || (data.distance ? Math.round(data.distance * 1000) : null),
+    deviationScore: data.deviationScore != null ? Number(data.deviationScore) : null,
+    message: data.message || (category === ALERT_CATEGORIES.BREACH ? 'Boundary breach detected' : 'Route deviation flagged'),
+    source: data.source || (data.isSimulation ? 'simulation' : 'hardware'),
+    acknowledged: Boolean(data.acknowledged),
     batteryPercent: data.batteryPercent || null,
   };
 
@@ -53,12 +68,14 @@ export function saveAlert(userId, data) {
 }
 
 /**
- * Load all alerts for a user.
+ * Load all alerts for a user, filtering out any legacy fall events.
  */
 export function loadAlerts(userId) {
   try {
     const key = userKey(userId, 'alerts');
-    return JSON.parse(localStorage.getItem(key)) || [];
+    const raw = JSON.parse(localStorage.getItem(key)) || [];
+    // Filter out fall-specific events from this product flow
+    return raw.filter(a => a.type !== 'fall_detected' && a.category !== 'fall_detected');
   } catch {
     return [];
   }
@@ -72,10 +89,10 @@ export function getRecentAlerts(userId, limit = 20) {
 }
 
 /**
- * Count unacknowledged alerts.
+ * Count unacknowledged non-nominal alerts.
  */
 export function getUnacknowledgedCount(userId) {
-  return loadAlerts(userId).filter(a => !a.acknowledged).length;
+  return loadAlerts(userId).filter(a => !a.acknowledged && a.type !== ALERT_CATEGORIES.NOMINAL).length;
 }
 
 /**
@@ -101,27 +118,15 @@ export function acknowledgeAll(userId) {
   try { localStorage.setItem(key, JSON.stringify(alerts)); } catch {}
 }
 
-/**
- * Get alert statistics for a given month (for progress tracking).
- * @param {string} userId
- * @param {string} monthKey — "YYYY-MM"
- */
-export function getMonthlyAlertStats(userId, monthKey) {
-  const alerts = loadAlerts(userId);
-  const monthAlerts = alerts.filter(a => a.timestamp.startsWith(monthKey));
-  return {
-    total: monthAlerts.length,
-    outOfZone: monthAlerts.filter(a => a.type === 'out_of_zone').length,
-    anomalies: monthAlerts.filter(a => a.type === 'anomaly').length,
-    lowBattery: monthAlerts.filter(a => a.type === 'low_battery').length,
-    avgDeviation: monthAlerts.length > 0
-      ? monthAlerts.reduce((sum, a) => sum + (a.deviationScore || 0), 0) / monthAlerts.length
-      : 0,
-  };
-}
-
-const alertStore = {
-  saveAlert, loadAlerts, getRecentAlerts, getUnacknowledgedCount,
-  acknowledgeAlert, acknowledgeAll, getMonthlyAlertStats
+export const alertStore = {
+  saveAlert,
+  addAlert: saveAlert,
+  loadAlerts,
+  getRecentAlerts,
+  getUnacknowledgedCount,
+  acknowledgeAlert,
+  acknowledgeAll,
+  ALERT_CATEGORIES,
 };
+
 export default alertStore;

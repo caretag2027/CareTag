@@ -1,0 +1,14 @@
+# CareTag robots.txt
+# Production Domain: https://caretag.caretag2027.workers.dev
+
+User-agent: *
+Allow: /
+Allow: /static/
+Allow: /assets/
+Allow: /CareTag_Report.pdf
+Allow: /llms.txt
+
+# Private API and telemetry endpoints
+Disallow: /api/
+
+Sitemap: https://caretag.caretag2027.workers.dev/sitemap.xml

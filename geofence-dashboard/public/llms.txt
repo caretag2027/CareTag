@@ -1,0 +1,26 @@
+# CareTag
+
+> Context-aware child safety companion combining GPS location tracking, safe-zone geofencing, and learned daily routine monitoring.
+
+CareTag is an engineering prototype designed for child safety monitoring. It connects an ESP32-based wearable smart band with a caregiver dashboard to evaluate daily commutes and alert caregivers to unexpected movement.
+
+## Core Capabilities
+
+- **Reported Location Tracking:** Displays device location, timestamp freshness, and battery level.
+- **Safe-Place Geofencing:** Allows caregivers to configure circular safe boundaries around familiar places such as home and school, with optional schedule windows.
+- **Routine-Aware Monitoring:** Evaluates daily movement patterns to detect unusual detours independently of boundary breaches.
+- **Contextual Alerts:** Delivers alerts with deviation confidence, distance to boundaries, and location context without alarmist claims.
+- **Taggy Companion:** A friendly product guide that assists caregivers with setup and alert interpretation.
+
+## Architecture
+
+- **Wearable Hardware:** ESP32 microcontroller, u-blox Neo-6M GPS receiver, SIM800L GSM module, and MPU-6050 accelerometer/gyroscope.
+- **Edge Backend:** Cloudflare Workers with KV persistence and Firebase Realtime Database telemetry ingestion.
+- **Caregiver Dashboard:** React single-page application with Leaflet mapping and responsive controls.
+- **Machine Learning Pipeline:** Stay-point clustering and routine deviation scoring modeled on habitual trajectory data.
+
+## Public Resources
+
+- Website: https://caretag.caretag2027.workers.dev/
+- Project Report: https://caretag.caretag2027.workers.dev/CareTag_Report.pdf
+- Academic Institution: Thapar Institute of Engineering & Technology, Batch of 2027

@@ -1,0 +1,365 @@
+/* ── CareTag Cookie Banner & Legal Modal Styles ── */
+
+.ct-cookie-banner-wrapper {
+  position: fixed;
+  bottom: 1.25rem;
+  left: 1.25rem;
+  right: 1.25rem;
+  max-width: 940px;
+  margin: 0 auto;
+  z-index: 9990;
+  animation: ctSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes ctSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ct-cookie-banner {
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid #D7E2EF;
+  border-radius: 14px;
+  padding: 1rem 1.25rem;
+  box-shadow: 0 12px 32px -4px rgba(11, 45, 91, 0.12), 0 4px 12px -2px rgba(11, 45, 91, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.ct-cookie-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  flex: 1;
+}
+
+.ct-cookie-icon {
+  color: #2563EB;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.ct-cookie-text {
+  font-family: 'Poppins', 'Inter', -apple-system, sans-serif;
+  font-size: 0.84rem;
+  line-height: 1.48;
+  color: #334155;
+  margin: 0;
+}
+
+.ct-cookie-text strong {
+  color: #0B2D5B;
+  font-weight: 600;
+}
+
+.ct-cookie-link {
+  color: #2563EB;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  transition: color 0.15s ease;
+}
+
+.ct-cookie-link:hover {
+  color: #0B2D5B;
+}
+
+.ct-cookie-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+
+.ct-cookie-btn {
+  font-family: 'Poppins', 'Inter', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 0.55rem 0.95rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.ct-cookie-btn--primary {
+  background: #2563EB;
+  color: #FFFFFF;
+  border: 1px solid #2563EB;
+}
+
+.ct-cookie-btn--primary:hover {
+  background: #1D4ED8;
+  border-color: #1D4ED8;
+}
+
+.ct-cookie-btn--secondary {
+  background: #F8FAFC;
+  color: #475569;
+  border: 1px solid #CBD5E1;
+}
+
+.ct-cookie-btn--secondary:hover {
+  background: #F1F5F9;
+  color: #0B2D5B;
+  border-color: #94A3B8;
+}
+
+/* ── Legal Document Modal ── */
+
+.ct-legal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(11, 45, 91, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  animation: ctFadeIn 0.2s ease;
+}
+
+@keyframes ctFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.ct-legal-dialog {
+  background: #FFFFFF;
+  width: 100%;
+  max-width: 680px;
+  max-height: 85vh;
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(11, 45, 91, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #D7E2EF;
+}
+
+.ct-legal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.1rem 1.4rem;
+  border-bottom: 1px solid #E2E8F0;
+  background: #F8FAFC;
+}
+
+.ct-legal-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.ct-legal-title-group h3 {
+  font-family: 'Poppins', sans-serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #0B2D5B;
+  margin: 0;
+}
+
+.ct-legal-close {
+  background: none;
+  border: none;
+  color: #64748B;
+  padding: 0.35rem;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.ct-legal-close:hover {
+  background: #E2E8F0;
+  color: #0B2D5B;
+}
+
+.ct-legal-tabs {
+  display: flex;
+  background: #F1F5F9;
+  padding: 0.3rem 1.4rem;
+  border-bottom: 1px solid #E2E8F0;
+  gap: 0.4rem;
+}
+
+.ct-legal-tab {
+  font-family: 'Poppins', 'Inter', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 0.45rem 0.85rem;
+  border-radius: 6px;
+  background: none;
+  border: none;
+  color: #64748B;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ct-legal-tab:hover {
+  color: #0B2D5B;
+}
+
+.ct-legal-tab.is-active {
+  background: #FFFFFF;
+  color: #2563EB;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.ct-legal-body {
+  padding: 1.4rem;
+  overflow-y: auto;
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: #334155;
+}
+
+.ct-legal-body h4 {
+  font-family: 'Poppins', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0B2D5B;
+  margin: 1.2rem 0 0.4rem;
+}
+
+.ct-legal-body h4:first-child {
+  margin-top: 0;
+}
+
+.ct-legal-body p {
+  margin: 0 0 0.85rem;
+}
+
+.ct-legal-body ul {
+  margin: 0 0 0.85rem;
+  padding-left: 1.25rem;
+}
+
+.ct-legal-body li {
+  margin-bottom: 0.35rem;
+}
+
+.ct-legal-footer {
+  padding: 0.9rem 1.4rem;
+  border-top: 1px solid #E2E8F0;
+  background: #F8FAFC;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ── Mobile Responsiveness ── */
+@media (max-width: 768px) {
+  .ct-cookie-banner-wrapper {
+    bottom: 0.75rem;
+    left: 0.75rem;
+    right: 0.75rem;
+  }
+
+  .ct-cookie-banner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.85rem;
+    padding: 0.95rem 1rem;
+  }
+
+  .ct-cookie-actions {
+    width: 100%;
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .ct-cookie-btn {
+    flex: 1;
+    text-align: center;
+    padding: 0.6rem 0.5rem;
+    font-size: 0.8rem;
+  }
+
+  .ct-legal-dialog {
+    max-height: 90vh;
+  }
+
+  .ct-legal-tabs {
+    padding: 0.25rem 0.75rem;
+    overflow-x: auto;
+  }
+
+  .ct-legal-tab {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.76rem;
+    white-space: nowrap;
+  }
+
+  .ct-legal-body {
+    padding: 1rem;
+    font-size: 0.84rem;
+  }
+}
+
+/* ── Footer Legal Links ── */
+.footer-legal-links {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.78rem;
+  color: #64748B;
+}
+
+.footer-legal-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  color: #64748B;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.footer-legal-link:hover {
+  color: #2563EB;
+}
+
+.footer-legal-dot {
+  color: #CBD5E1;
+}
+
+@media (max-width: 768px) {
+  .landing-footer .footer-bottom {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    align-items: center;
+    text-align: center;
+  }
+
+  .footer-legal-links {
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+}
+

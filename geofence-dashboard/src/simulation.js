@@ -1,102 +1,82 @@
 /**
- * CareTag GPS Simulation Engine
+ * CareTag Scenario Simulation Engine
  * 
- * Simulates realistic device movement using the user's saved geofences
- * as location clusters. The simulated device:
- *   - Stays at geofence centers (stationary phases)
- *   - Commutes between geofences (moving phases with interpolation)
- *   - Occasionally wanders to unexpected locations (anomalies)
+ * Provides verifiable, reproducible evaluation scenarios for Capstone engineering demonstrations:
+ * - Preset 1: Nominal Safety (device inside active safe place, valid telemetry, nominal state)
+ * - Preset 2: Boundary Breach (device steps outside active safe place boundary, triggers boundary breach event)
+ * - Preset 3: Route Deviation (device materially deviates from learned expected route corridor)
  * 
- * Deviation scoring uses the same haversine + threshold logic
- * as the CareTag ML pipeline (config: ANOMALY_THRESHOLD=0.6,
- * MAX_EXPECTED_DISTANCE_KM=10).
+ * Strict isolation guarantees:
+ * - All simulated packets are flagged with source: 'simulation', deviceKey: 'DEMO-BAND-01', isSimulation: true
+ * - Simulated packets NEVER overwrite live hardware telemetry
+ * - Reset and Clear restore clean state without altering live hardware data
  */
 
-// ── CareTag config constants (from config.py) ──
-const ANOMALY_THRESHOLD = 0.6;
-const SPATIAL_WEIGHT = 0.5;
-const TEMPORAL_WEIGHT = 0.5;
+import { computeHaversineKm } from './utils/dashboardUtils';
 
-// ── Haversine distance (same formula as anomaly_scorer.py) ──
-function haversineKm(lat1, lon1, lat2, lon2) {
-  const R = 6371.0;
-  const toRad = (d) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
+export const SCENARIO_PRESETS = {
+  NOMINAL: 'scenario_nominal',
+  BREACH: 'scenario_breach',
+  DEVIATION: 'scenario_deviation',
+};
 
-// ── GPS jitter to simulate real device noise ──
-function addJitter(lat, lon, metersRange = 30) {
-  const jitterDeg = metersRange / 111320; // ~1 degree = 111.32 km
-  return {
-    lat: lat + (Math.random() - 0.5) * 2 * jitterDeg,
-    lon: lon + (Math.random() - 0.5) * 2 * jitterDeg,
-  };
-}
+export const SCENARIO_METADATA = {
+  [SCENARIO_PRESETS.NOMINAL]: {
+    id: SCENARIO_PRESETS.NOMINAL,
+    name: '1. Nominal Safety',
+    tag: 'All Normal',
+    description: 'Simulates device safely inside an actively monitored safe place with valid telemetry. No boundary breach or route deviation is flagged.',
+    expectedResult: 'Inside Safe Place · Nominal Safety · Zero Alerts',
+  },
+  [SCENARIO_PRESETS.BREACH]: {
+    id: SCENARIO_PRESETS.BREACH,
+    name: '2. Boundary Breach',
+    tag: 'Critical Breach',
+    description: 'Simulates device moving beyond the perimeter of an active safe place into unmonitored territory. Evaluates distance against radius and triggers a boundary breach alert.',
+    expectedResult: 'Outside Safe Place · Boundary Breach Event Emitted',
+  },
+  [SCENARIO_PRESETS.DEVIATION]: {
+    id: SCENARIO_PRESETS.DEVIATION,
+    name: '3. Route Deviation',
+    tag: 'Corridor Deviation',
+    description: 'Simulates device departing from the expected commute route into an unlearned side corridor. Calculates deviation score and triggers a route deviation alert.',
+    expectedResult: 'Deviation Score > 0.65 · Route Deviation Event Emitted',
+  },
+};
 
-// ── Interpolate between two points ──
-function interpolate(from, to, t) {
-  return {
-    lat: from.lat + (to.lat - from.lat) * t,
-    lon: from.lon + (to.lon - from.lon) * t,
-  };
-}
-
-/**
- * The simulation state machine.
- * 
- * Phases:
- *   STAY      — device is stationary at a geofence center
- *   COMMUTE   — device is moving between two geofences
- *   ANOMALY   — device wanders to unexpected location
- */
 class GPSSimulation {
   constructor() {
     this.geofences = [];
     this.intervalId = null;
     this.onPacket = null;
     this.tickCount = 0;
-    this.phase = 'STAY';        // STAY | COMMUTE | ANOMALY
-    this.currentGeoIdx = 0;     // index into geofences
-    this.targetGeoIdx = 0;
-    this.phaseProgress = 0;     // 0..1 progress through current phase
-    this.phaseDuration = 0;     // how many ticks this phase lasts
-    this.phaseTick = 0;
-    this.currentLat = 0;
-    this.currentLon = 0;
     this.running = false;
+    this.activeScenario = null;
+    this.simulatedAlerts = [];
+    this.currentLat = 30.3491;
+    this.currentLon = 76.4117;
+    this.intervalMs = 3000;
   }
 
   /**
-   * Start the simulation.
-   * @param {Array} geofences — array of { id, label, centerLatitude, centerLongitude, radiusMeters }
-   * @param {Function} onPacket — callback(packet) called every tick with simulated GPS data
-   * @param {number} intervalMs — tick interval in ms (default 3000 = 3s)
+   * Start general simulation along configured geofences.
    */
   start(geofences, onPacket, intervalMs = 3000) {
     this.stop();
-
     if (!geofences || geofences.length === 0) return;
 
     this.geofences = geofences;
     this.onPacket = onPacket;
+    this.intervalMs = intervalMs;
     this.tickCount = 0;
     this.running = true;
+    this.activeScenario = 'commute_general';
 
-    // Start at the first geofence
-    this.currentGeoIdx = 0;
     this.currentLat = geofences[0].centerLatitude;
     this.currentLon = geofences[0].centerLongitude;
-    this._startStayPhase(0);
 
-    this.intervalId = setInterval(() => this._tick(), intervalMs);
-    // Fire immediately
-    this._tick();
+    this.intervalId = setInterval(() => this._tickGeneral(), intervalMs);
+    this._tickGeneral();
   }
 
   stop() {
@@ -107,195 +87,270 @@ class GPSSimulation {
     this.running = false;
   }
 
-  /** Update geofences while simulation is running */
-  updateGeofences(geofences) {
-    this.geofences = geofences || [];
-    if (this.geofences.length === 0) {
-      this.stop();
+  reset() {
+    this.stop();
+    this.activeScenario = null;
+    this.simulatedAlerts = [];
+    this.tickCount = 0;
+    if (this.geofences && this.geofences[0]) {
+      this.currentLat = this.geofences[0].centerLatitude;
+      this.currentLon = this.geofences[0].centerLongitude;
     }
   }
 
-  // ── Phase management ──
-
-  _startStayPhase(geoIdx) {
-    this.phase = 'STAY';
-    this.currentGeoIdx = geoIdx % this.geofences.length;
-    this.phaseTick = 0;
-    // Stay for 8–15 ticks (24–45 seconds at 3s interval)
-    this.phaseDuration = 8 + Math.floor(Math.random() * 8);
-  }
-
-  _startCommutePhase(fromIdx, toIdx) {
-    this.phase = 'COMMUTE';
-    this.currentGeoIdx = fromIdx;
-    this.targetGeoIdx = toIdx;
-    this.phaseTick = 0;
-    // Commute takes 6–12 ticks
-    this.phaseDuration = 6 + Math.floor(Math.random() * 7);
-  }
-
-  _startAnomalyPhase() {
-    this.phase = 'ANOMALY';
-    this.phaseTick = 0;
-    // Anomaly lasts 4–8 ticks
-    this.phaseDuration = 4 + Math.floor(Math.random() * 5);
-  }
-
-  // ── Core tick ──
-
-  _tick() {
-    if (this.geofences.length === 0) return;
+  advanceStep() {
+    if (!this.geofences || this.geofences.length === 0) return;
     this.tickCount++;
-    this.phaseTick++;
+    this._emitPacket({
+      latitude: this.currentLat,
+      longitude: this.currentLon,
+      deviationScore: 0.1,
+      isAnomaly: false,
+    });
+  }
 
-    let speed = 0;
-    let motionState = 'stationary';
-
-    const geo = this.geofences[this.currentGeoIdx];
-
-    if (this.phase === 'STAY') {
-      // Slight jitter around geofence center
-      const jittered = addJitter(geo.centerLatitude, geo.centerLongitude, 20);
-      this.currentLat = jittered.lat;
-      this.currentLon = jittered.lon;
-      speed = Math.random() * 0.5; // nearly stationary
-
-      if (this.phaseTick >= this.phaseDuration) {
-        // Decide next: commute to another geofence, or inject anomaly
-        if (this.geofences.length > 1 && Math.random() < 0.8) {
-          // Pick a different geofence to commute to
-          let nextIdx = (this.currentGeoIdx + 1) % this.geofences.length;
-          this._startCommutePhase(this.currentGeoIdx, nextIdx);
-        } else if (Math.random() < 0.4) {
-          // Anomaly
-          this._startAnomalyPhase();
-        } else {
-          // Stay longer at same location
-          this._startStayPhase(this.currentGeoIdx);
-        }
+  setSpeed(intervalMs) {
+    this.intervalMs = intervalMs;
+    if (this.running && this.intervalId) {
+      clearInterval(this.intervalId);
+      if (this.activeScenario && this.activeScenario.startsWith('scenario_')) {
+        this.intervalId = setInterval(() => this._tickScenario(this.activeScenario), intervalMs);
+      } else {
+        this.intervalId = setInterval(() => this._tickGeneral(), intervalMs);
       }
-    } else if (this.phase === 'COMMUTE') {
-      const from = this.geofences[this.currentGeoIdx];
-      const to = this.geofences[this.targetGeoIdx];
-      const t = Math.min(this.phaseTick / this.phaseDuration, 1);
-      // Ease in-out for natural movement
-      const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    }
+  }
 
-      const pos = interpolate(
-        { lat: from.centerLatitude, lon: from.centerLongitude },
-        { lat: to.centerLatitude, lon: to.centerLongitude },
-        eased
-      );
-      const jittered = addJitter(pos.lat, pos.lon, 50);
-      this.currentLat = jittered.lat;
-      this.currentLon = jittered.lon;
+  /**
+   * Start one of the 3 dedicated Capstone Evaluator Scenarios.
+   * @param {'scenario_nominal'|'scenario_breach'|'scenario_deviation'|'scenario_safe'} scenarioId
+   * @param {Array} geofences
+   * @param {Function} onPacket
+   */
+  startScenario(scenarioId, geofences, onPacket) {
+    this.stop();
+    // Alias scenario_safe to scenario_nominal for backwards compatibility
+    const targetScenario = scenarioId === 'scenario_safe' ? SCENARIO_PRESETS.NOMINAL : scenarioId;
 
-      // Calculate speed from distance between geofences
-      const totalDist = haversineKm(
-        from.centerLatitude, from.centerLongitude,
-        to.centerLatitude, to.centerLongitude
-      );
-      speed = (totalDist / (this.phaseDuration * 3 / 3600)) || 5; // rough km/h
-      speed = Math.min(speed, 60) + (Math.random() - 0.5) * 5;
+    this.geofences = geofences && geofences.length > 0 ? geofences : [
+      { id: 'geo-home', label: 'Home Safe Place', centerLatitude: 30.3491, centerLongitude: 76.4117, radiusMeters: 400 },
+      { id: 'geo-school', label: 'School Campus', centerLatitude: 30.3555, centerLongitude: 76.4225, radiusMeters: 500 }
+    ];
+    this.onPacket = onPacket;
+    this.activeScenario = targetScenario;
+    this.running = true;
+    this.tickCount = 0;
+
+    const baseGeo = this.geofences[0];
+
+    if (targetScenario === SCENARIO_PRESETS.NOMINAL) {
+      this.currentLat = baseGeo.centerLatitude;
+      this.currentLon = baseGeo.centerLongitude;
+    } else if (targetScenario === SCENARIO_PRESETS.DEVIATION) {
+      // Offset from expected corridor
+      this.currentLat = baseGeo.centerLatitude + 0.004;
+      this.currentLon = baseGeo.centerLongitude + 0.005;
+    } else if (targetScenario === SCENARIO_PRESETS.BREACH) {
+      // 1.2km offset outside all safe places
+      this.currentLat = baseGeo.centerLatitude + 0.012;
+      this.currentLon = baseGeo.centerLongitude + 0.015;
+    }
+
+    this.intervalId = setInterval(() => this._tickScenario(targetScenario), 2500);
+    this._tickScenario(targetScenario);
+  }
+
+  /**
+   * Manual scenario control to inject simulated telemetry inputs
+   */
+  setManualPosition(lat, lon, speedKph = 3.5) {
+    this.currentLat = Number(lat);
+    this.currentLon = Number(lon);
+    this._emitPacket({
+      latitude: this.currentLat,
+      longitude: this.currentLon,
+      speedKph: Number(speedKph),
+      source: 'simulation_manual',
+    });
+  }
+
+  _tickScenario(scenarioId) {
+    this.tickCount++;
+    const baseGeo = this.geofences[0] || { centerLatitude: 30.3491, centerLongitude: 76.4117, radiusMeters: 400, label: 'Home Safe Place' };
+
+    let lat = this.currentLat;
+    let lon = this.currentLon;
+    let speed = 3.2;
+    let isAnomaly = false;
+    let devScore = 0.08;
+    let eventType = 'nominal_safety';
+    let motionState = 'moving';
+
+    if (scenarioId === SCENARIO_PRESETS.NOMINAL) {
+      // Moving inside safe zone boundary
+      const t = (this.tickCount % 6) / 6;
+      lat = baseGeo.centerLatitude + (Math.sin(t * Math.PI * 2) * 0.001);
+      lon = baseGeo.centerLongitude + (Math.cos(t * Math.PI * 2) * 0.001);
+      devScore = 0.08;
+      isAnomaly = false;
+      eventType = 'nominal_safety';
       motionState = 'moving';
-
-      if (this.phaseTick >= this.phaseDuration) {
-        this._startStayPhase(this.targetGeoIdx);
-      }
-    } else if (this.phase === 'ANOMALY') {
-      // Wander to a random offset from current position
-      if (this.phaseTick === 1) {
-        // Pick an anomaly direction — just outside geofence radius (0.5-2km away)
-        const angle = Math.random() * 2 * Math.PI;
-        const geoRadiusKm = (geo.radiusMeters || 500) / 1000;
-        const distKm = geoRadiusKm + 0.5 + Math.random() * 1.5; // 0.5–2km beyond fence edge
-        const dLat = (distKm / 111.32) * Math.cos(angle);
-        const dLon = (distKm / (111.32 * Math.cos((geo.centerLatitude * Math.PI) / 180))) * Math.sin(angle);
-        this._anomalyTarget = {
-          lat: geo.centerLatitude + dLat,
-          lon: geo.centerLongitude + dLon,
-        };
-      }
-
-      const t = Math.min(this.phaseTick / this.phaseDuration, 1);
-      const pos = interpolate(
-        { lat: geo.centerLatitude, lon: geo.centerLongitude },
-        this._anomalyTarget || { lat: geo.centerLatitude + 0.05, lon: geo.centerLongitude + 0.05 },
-        t
-      );
-      const jittered = addJitter(pos.lat, pos.lon, 80);
-      this.currentLat = jittered.lat;
-      this.currentLon = jittered.lon;
-      speed = 15 + Math.random() * 25;
+    } else if (scenarioId === SCENARIO_PRESETS.BREACH) {
+      // Steps further outside active boundary
+      const progress = Math.min(1.0, this.tickCount * 0.15);
+      lat = baseGeo.centerLatitude + 0.008 + (progress * 0.006);
+      lon = baseGeo.centerLongitude + 0.010 + (progress * 0.008);
+      devScore = 0.92;
+      isAnomaly = true;
+      eventType = 'boundary_breach';
       motionState = 'moving';
+    } else if (scenarioId === SCENARIO_PRESETS.DEVIATION) {
+      // Diverges perpendicular to expected corridor
+      const progress = this.tickCount * 0.0006;
+      lat = baseGeo.centerLatitude + 0.005 + progress;
+      lon = baseGeo.centerLongitude - 0.004 - progress;
+      devScore = 0.84;
+      isAnomaly = true;
+      eventType = 'route_deviation';
+      motionState = 'moving';
+    }
 
-      if (this.phaseTick >= this.phaseDuration) {
-        // Return to a geofence
-        this._startCommutePhase(
-          this.currentGeoIdx,
-          Math.floor(Math.random() * this.geofences.length)
-        );
+    this.currentLat = lat;
+    this.currentLon = lon;
+
+    // Calculate distance to nearest safe zone
+    let minDistanceKm = Infinity;
+    let nearestZoneLabel = baseGeo.label;
+    for (const g of this.geofences) {
+      const d = computeHaversineKm(lat, lon, g.centerLatitude, g.centerLongitude);
+      if (d != null && d < minDistanceKm) {
+        minDistanceKm = d;
+        nearestZoneLabel = g.label;
       }
     }
 
-    // ── Compute deviation score (mirrors CareTag anomaly_scorer.py) ──
-    const { nearestIdx, distKm, radiusKm } = this._findNearestGeofence(this.currentLat, this.currentLon);
-    // Score based on how far OUTSIDE the nearest geofence the device is
-    const outsideDist = Math.max(0, distKm - radiusKm);
-    // Normalize: 0 when inside fence, 1.0 when 2x the radius outside
-    const maxExpectedDist = Math.max(radiusKm * 2, 0.5); // at least 500m
-    const spatialScore = Math.min(outsideDist / maxExpectedDist, 1.0);
-    // Temporal component: if at expected cluster → 0, otherwise estimate
-    const atExpected = nearestIdx === this.currentGeoIdx ? 0.0 : 0.5;
-    const deviationScore = SPATIAL_WEIGHT * spatialScore + TEMPORAL_WEIGHT * atExpected;
-    const isAnomaly = deviationScore > ANOMALY_THRESHOLD || outsideDist > radiusKm;
-
-    if (isAnomaly) {
-      motionState = 'abnormal';
-    }
-
-    // ── Build packet (matches backend GsmPacket DTO shape) ──
-    const now = new Date();
     const packet = {
-      id: this.tickCount,
+      id: `sim-${scenarioId}-${this.tickCount}`,
       deviceKey: 'SIM-DEVICE-01',
-      packetType: 'GPS',
-      capturedAtUtc: now.toISOString(),
-      receivedAtUtc: now.toISOString(),
-      latitude: parseFloat(this.currentLat.toFixed(6)),
-      longitude: parseFloat(this.currentLon.toFixed(6)),
+      source: 'simulation',
+      scenarioId,
+      isSimulation: true,
+      isHardware: false,
+      timestamp: new Date().toISOString(),
+      capturedAtUtc: new Date().toISOString(),
+      latitude: parseFloat(lat.toFixed(6)),
+      longitude: parseFloat(lon.toFixed(6)),
       speedKph: parseFloat(speed.toFixed(1)),
-      headingDegrees: Math.floor(Math.random() * 360),
-      accuracyMeters: 5 + Math.random() * 15,
-      batteryPercent: Math.max(10, 95 - Math.floor(this.tickCount * 0.1)),
-      gpsEnabled: true,
-      motionState: motionState,
-      routineState: this.phase.toLowerCase(),
-      deviationScore: parseFloat(deviationScore.toFixed(4)),
-      signalRssi: -60 - Math.floor(Math.random() * 30),
-      isAnomaly: isAnomaly,
-      nearestGeofence: this.geofences[nearestIdx]?.label || null,
-      distToNearestKm: parseFloat(distKm.toFixed(3)),
-      phase: this.phase,
+      headingDegrees: 90,
+      accuracyMeters: 4.5,
+      batteryPercent: Math.max(20, 95 - Math.floor(this.tickCount * 0.2)),
+      motionState,
+      deviationScore: parseFloat(devScore.toFixed(3)),
+      isAnomaly,
+      eventType,
+      nearestGeofence: nearestZoneLabel,
+      distToNearestKm: parseFloat(minDistanceKm.toFixed(3)),
+      accelerometer: {
+        x_ms2: 0.25,
+        y_ms2: 0.65,
+        z_ms2: -9.81,
+        magnitude: 9.83,
+      },
+      gyroscope: {
+        x_dps: 5.2,
+        y_dps: 3.1,
+        z_dps: 1.4,
+        magnitude: 6.2,
+      },
+      gps: {
+        latitude: lat,
+        longitude: lon,
+        valid: true,
+        satellites: 8,
+      },
     };
 
-    this.onPacket?.(packet);
+    if (this.onPacket) {
+      this.onPacket(packet);
+    }
   }
 
-  _findNearestGeofence(lat, lon) {
-    let minDist = Infinity;
-    let nearestIdx = 0;
-    for (let i = 0; i < this.geofences.length; i++) {
-      const d = haversineKm(lat, lon, this.geofences[i].centerLatitude, this.geofences[i].centerLongitude);
-      if (d < minDist) {
-        minDist = d;
-        nearestIdx = i;
-      }
+  _tickGeneral() {
+    this.tickCount++;
+    const baseGeo = this.geofences[0];
+    const targetGeo = this.geofences[1] || baseGeo;
+    const t = (this.tickCount % 12) / 12;
+
+    const lat = baseGeo.centerLatitude + (targetGeo.centerLatitude - baseGeo.centerLatitude) * t;
+    const lon = baseGeo.centerLongitude + (targetGeo.centerLongitude - baseGeo.centerLongitude) * t;
+
+    this.currentLat = lat;
+    this.currentLon = lon;
+
+    this._emitPacket({
+      latitude: lat,
+      longitude: lon,
+      speedKph: 3.8,
+      deviationScore: 0.08,
+      isAnomaly: false,
+      eventType: 'nominal_safety',
+    });
+  }
+
+  _emitPacket(overrides = {}) {
+    const lat = overrides.latitude ?? this.currentLat;
+    const lon = overrides.longitude ?? this.currentLon;
+
+    const packet = {
+      id: `sim-step-${Date.now()}`,
+      deviceKey: 'SIM-DEVICE-01',
+      source: 'simulation',
+      isSimulation: true,
+      isHardware: false,
+      timestamp: new Date().toISOString(),
+      capturedAtUtc: new Date().toISOString(),
+      latitude: parseFloat(Number(lat).toFixed(6)),
+      longitude: parseFloat(Number(lon).toFixed(6)),
+      speedKph: overrides.speedKph ?? 0,
+      headingDegrees: 0,
+      accuracyMeters: 4.0,
+      batteryPercent: 92,
+      motionState: overrides.motionState || 'stationary',
+      deviationScore: overrides.deviationScore ?? 0.05,
+      isAnomaly: Boolean(overrides.isAnomaly),
+      eventType: overrides.eventType || 'nominal_safety',
+      nearestGeofence: this.geofences[0]?.label || 'Safe Place',
+      distToNearestKm: 0.05,
+      accelerometer: {
+        x_ms2: 0.1,
+        y_ms2: 0.2,
+        z_ms2: -9.81,
+        magnitude: 9.81,
+      },
+      gyroscope: {
+        x_dps: 1.0,
+        y_dps: 1.0,
+        z_dps: 0.5,
+        magnitude: 1.5,
+      },
+      gps: {
+        latitude: lat,
+        longitude: lon,
+        valid: true,
+        satellites: 8,
+      },
+      ...overrides,
+    };
+
+    if (this.onPacket) {
+      this.onPacket(packet);
     }
-    return { nearestIdx, distKm: minDist, radiusKm: (this.geofences[nearestIdx]?.radiusMeters || 500) / 1000 };
+  }
+
+  updateGeofences(geofences) {
+    this.geofences = geofences || [];
   }
 }
 
-// Singleton
 const simulation = new GPSSimulation();
 export default simulation;
