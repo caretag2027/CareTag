@@ -148,9 +148,7 @@ function MapResizeHandler({ isMapExpanded }) {
   return null;
 }
 
-/* ──────────────────────────────────────────────────────────────
-   Caregiver Access Portal (Rendered via ./components/AuthPage)
-   ────────────────────────────────────────────────────────────── */
+
 
 /* ──────────────────────────────────────────────────────────────
    Main App: Landing Showcase, Auth, and Live Dashboard Views
