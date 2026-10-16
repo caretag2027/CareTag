@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Shield, Activity, Bell, Compass, ArrowRight,
-  ShieldAlert
+  ShieldAlert, Sparkles
 } from 'lucide-react';
 import taggyImg from '../assets/taggy.png';
 import CareTagLogo from './CareTagLogo';
@@ -9,16 +9,19 @@ import HeroRoutineSimulation from './HeroRoutineSimulation';
 
 // Verified Capstone Project Team (Thapar Institute of Engineering & Technology, Batch of 2027)
 const teamMembers = [
-  { id: 1, name: 'Kinjal', role: 'Computer Engineering' },
-  { id: 2, name: 'Guneev Taneja', role: 'Computer Engineering' },
-  { id: 3, name: 'Bhavishya Singla', role: 'Computer Engineering' },
-  { id: 4, name: 'Manya Sharma', role: 'Computer Engineering' },
-  { id: 5, name: 'Anureet', role: 'Computer Engineering' },
+  { id: 1, name: 'Kinjal', initials: 'KS', role: 'Computer Engineering' },
+  { id: 2, name: 'Guneev Taneja', initials: 'GT', role: 'Computer Engineering' },
+  { id: 3, name: 'Bhavishya Singla', initials: 'BS', role: 'Computer Engineering' },
+  { id: 4, name: 'Manya Sharma', initials: 'MS', role: 'Computer Engineering' },
+  { id: 5, name: 'Anureet', initials: 'AN', role: 'Computer Engineering' },
 ];
 
 /**
- * CareTag Public Homepage — Clean on-brand layout with essential header navigation
- * & Built-by team showcase
+ * CareTag Public Homepage
+ *
+ * Implements strict brand guidelines: Poppins typography, CareTag Navy (#0B2D5B),
+ * CareTag Blue (#2563EB), Mint/Teal (#14B8A6), ample vertical spacing,
+ * and clear visual hierarchy.
  */
 export default function LandingPage({ onLaunchDashboard, onOpenAuth }) {
   const [scrolled, setScrolled] = useState(false);
@@ -34,7 +37,7 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth }) {
 
   return (
     <div className="landing-page">
-      {/* ── 1. Floating Frosted-Glass Header (Important Links Only) ── */}
+      {/* ── 1. Floating Frosted-Glass Header ── */}
       <div className="floating-header-wrapper">
         <header className={`floating-header ${scrolled ? 'is-scrolled' : ''}`}>
           {/* Logo on the left */}
@@ -46,15 +49,23 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth }) {
             <CareTagLogo variant="horizontal" size="sm" showTagline={false} />
           </div>
 
-          {/* Navigation links in the middle: Essential sections only */}
+          {/* Navigation links in the middle */}
           <nav className="floating-nav" aria-label="Main Navigation">
             <a href="#how-it-works" className="floating-nav-link">How it works</a>
             <a href="#preview" className="floating-nav-link">Features</a>
             <a href="#team" className="floating-nav-link">Built by</a>
           </nav>
 
-          {/* Dominant Pill CTA button on the right */}
+          {/* Actions on the right */}
           <div className="floating-actions">
+            <button
+              type="button"
+              className="floating-signin-link"
+              onClick={onOpenAuth}
+            >
+              Sign in
+            </button>
+
             <button
               type="button"
               className="btn-floating-pill-cta"
@@ -67,17 +78,23 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth }) {
         </header>
       </div>
 
-      {/* ── 2. Modern Airy Centered Hero Section (Solid Brand Colors, No Gradients) ── */}
+      {/* ── 2. Modern Airy Hero Section ── */}
       <section className="hero-section">
         <div className="hero-container">
-          {/* Headline with Clean Brand Color */}
+          {/* Eyebrow Pill */}
+          <div className="hero-eyebrow-badge">
+            <span className="hero-eyebrow-dot" />
+            <span>Context-Aware Child Safety &bull; Thapar University Capstone</span>
+          </div>
+
+          {/* Main Hero Headline */}
           <h1 className="hero-title">
             Safety that understands <span className="hero-title-highlight">routines.</span>
           </h1>
 
           {/* Concise Subhead */}
           <p className="hero-subtitle">
-            Location boundaries and routine awareness to help caregivers notice unexpected movement.
+            Location boundaries and routine-learning intelligence to help caregivers notice unexpected movement before it becomes an emergency.
           </p>
 
           {/* Centered CTA Row */}
@@ -92,13 +109,29 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth }) {
             </button>
 
             <a href="#how-it-works" className="btn-hero-secondary">
-              <span>See how it works ↓</span>
+              <span>See how it works &darr;</span>
             </a>
           </div>
 
           {/* ── 3. Visual 4-Day Routine Awareness Demonstration (Home ↔ School) ── */}
           <div className="hero-product-showcase" id="preview">
             <div className="showcase-browser-frame">
+              {/* Browser chrome header for polish */}
+              <div className="showcase-browser-bar">
+                <div className="showcase-browser-controls">
+                  <span className="browser-circle dot-red" />
+                  <span className="browser-circle dot-yellow" />
+                  <span className="browser-circle dot-green" />
+                </div>
+                <div className="showcase-browser-address">
+                  caretag.app/routine-learning-demo
+                </div>
+                <div className="showcase-browser-status">
+                  <span className="showcase-pulse-dot" />
+                  <span>Interactive 4-Day Model</span>
+                </div>
+              </div>
+
               {/* 4-Day Interactive Simulation */}
               <HeroRoutineSimulation />
             </div>
@@ -110,9 +143,13 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth }) {
       <section id="how-it-works" className="how-it-works-section">
         <div className="section-container">
           <div className="section-header text-center">
+            <div className="section-eyebrow-pill">
+              <Compass size={13} />
+              <span>THREE-STEP METHODOLOGY</span>
+            </div>
             <h2 className="section-title">Three steps to routine awareness</h2>
             <p className="section-lead">
-              From daily habits to clear, contextual location alerts.
+              From daily habits to clear, contextual safety alerts without overwhelming the caregiver.
             </p>
           </div>
 
@@ -120,42 +157,42 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth }) {
             {/* Step 1 */}
             <div className="step-card">
               <div className="step-card-top">
-                <div className="step-icon-box">
+                <div className="step-icon-box step-icon-blue">
                   <Compass size={22} />
                 </div>
                 <span className="step-number-indicator">01</span>
               </div>
-              <h3>Learn movement patterns</h3>
-              <p>
-                CareTag uses historical GPS trajectories to model recurring places and times.
+              <h3 className="step-card-title">Learn movement patterns</h3>
+              <p className="step-card-desc">
+                CareTag analyzes historical GPS trajectories to model recurring places, transit corridors, and regular commute hours.
               </p>
             </div>
 
             {/* Step 2 */}
             <div className="step-card">
               <div className="step-card-top">
-                <div className="step-icon-box">
+                <div className="step-icon-box step-icon-teal">
                   <Activity size={22} />
                 </div>
                 <span className="step-number-indicator">02</span>
               </div>
-              <h3>Check location and routine</h3>
-              <p>
-                Evaluates safe-place boundaries and routine deviation independently.
+              <h3 className="step-card-title">Check location &amp; routine</h3>
+              <p className="step-card-desc">
+                Continuously evaluates safe-place boundaries and routine deviation independently to flag deviations early.
               </p>
             </div>
 
             {/* Step 3 */}
             <div className="step-card">
               <div className="step-card-top">
-                <div className="step-icon-box">
+                <div className="step-icon-box step-icon-indigo">
                   <Bell size={22} />
                 </div>
                 <span className="step-number-indicator">03</span>
               </div>
-              <h3>Review useful context</h3>
-              <p>
-                Review alert details, deviation confidence, and location context.
+              <h3 className="step-card-title">Review useful context</h3>
+              <p className="step-card-desc">
+                Surfaces the anomaly confidence score and location context so caregivers can make informed decisions quickly.
               </p>
             </div>
           </div>
@@ -166,43 +203,44 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth }) {
       <section id="difference" className="different-section">
         <div className="section-container">
           <div className="section-header text-center">
-            <h2 className="section-title">Location is only part of the picture.</h2>
+            <div className="section-eyebrow-pill">
+              <ShieldAlert size={13} />
+              <span>THE CAREGIVER ADVANTAGE</span>
+            </div>
+            <h2 className="section-title">Location is only half the picture.</h2>
             <p className="section-lead">
-              Not just where someone is. Whether their movement looks unusual for them.
+              Standard trackers only display a dot on a map. CareTag understands whether the movement fits habitual daily life.
             </p>
           </div>
 
           <div className="different-grid">
             <div className="different-card">
-              <div className="different-card-icon">
+              <div className="different-card-icon icon-blue">
                 <Activity size={22} />
               </div>
-              <h3>Routine-aware</h3>
-              <p>
-                Considers when and where a person normally moves, distinguishing habitual daily trips
-                from unexpected departures.
+              <h3 className="different-card-title">Routine-aware</h3>
+              <p className="different-card-desc">
+                Considers when and where a person normally moves, distinguishing habitual daily trips from unexpected departures.
               </p>
             </div>
 
             <div className="different-card">
-              <div className="different-card-icon">
+              <div className="different-card-icon icon-rose">
                 <ShieldAlert size={22} />
               </div>
-              <h3>Two independent checks</h3>
-              <p>
-                Safe-zone breaches and behavioral deviations can each raise an alert, catching unusual
-                wandering even within a wide boundary.
+              <h3 className="different-card-title">Two independent checks</h3>
+              <p className="different-card-desc">
+                Safe-zone breaches and behavioral deviations can each raise an alert, catching unusual wandering even within a wide boundary.
               </p>
             </div>
 
             <div className="different-card">
-              <div className="different-card-icon">
+              <div className="different-card-icon icon-teal">
                 <Shield size={22} />
               </div>
-              <h3>Contextual alerts</h3>
-              <p>
-                Surfaces the deviation score and location details to support caregiver review,
-                providing clear context rather than alarmist panic.
+              <h3 className="different-card-title">Contextual, calm alerts</h3>
+              <p className="different-card-desc">
+                Surfaces the deviation score and location details to support caregiver review, providing clear context rather than alarmist panic.
               </p>
             </div>
           </div>
@@ -221,9 +259,13 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth }) {
               />
             </div>
             <div className="taggy-strip-main">
+              <div className="taggy-pill-label">
+                <Sparkles size={13} />
+                <span>SAFETY COMPANION</span>
+              </div>
               <h3 className="taggy-strip-title">Meet Taggy, your CareTag companion.</h3>
               <p className="taggy-strip-desc">
-                Friendly guidance for safe-place setup and safety alerts.
+                Friendly guidance for safe-place setup, wearable telemetry status, and contextual safety notifications.
               </p>
             </div>
           </div>
@@ -234,15 +276,19 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth }) {
       <section id="team" className="team-section">
         <div className="section-container">
           <div className="section-header text-center">
+            <div className="section-eyebrow-pill">
+              <span>ACADEMIC EXCELLENCE &bull; BATCH OF 2027</span>
+            </div>
             <h2 className="section-title">The team behind CareTag</h2>
             <p className="section-lead team-subtitle">
-              Thapar Institute of Engineering &amp; Technology · Batch of 2027 · Capstone Project
+              Thapar Institute of Engineering &amp; Technology &bull; Computer Engineering Capstone Project
             </p>
           </div>
 
           <div className="team-grid">
             {teamMembers.map((member) => (
               <div key={member.id} className="team-card">
+                <div className="team-avatar-initials">{member.initials}</div>
                 <h3 className="team-name">{member.name}</h3>
                 <span className="team-role">{member.role}</span>
               </div>
@@ -250,9 +296,12 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth }) {
           </div>
 
           <div className="team-mentor-wrap">
-            <p className="team-mentor-line">
-              Faculty Mentor: <strong>Dr. Kapil Tomar</strong>, Associate Professor, CSED
-            </p>
+            <div className="team-mentor-pill">
+              <span className="team-mentor-badge">Faculty Mentor</span>
+              <span className="team-mentor-text">
+                <strong>Dr. Kapil Tomar</strong>, Associate Professor, CSED
+              </span>
+            </div>
           </div>
         </div>
       </section>
@@ -261,13 +310,16 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth }) {
       <section className="final-cta-section">
         <div className="section-container">
           <div className="final-cta-card">
-            <h2>Explore the CareTag dashboard.</h2>
-            <p>
+            <div className="section-eyebrow-pill">
+              <span>READY TO BEGIN</span>
+            </div>
+            <h2 className="final-cta-title">Explore the CareTag dashboard.</h2>
+            <p className="final-cta-desc">
               Configure safe places and explore routine-aware location monitoring in real time.
             </p>
             <button
               type="button"
-              className="btn-hero-primary"
+              className="btn-hero-primary final-cta-btn"
               onClick={onLaunchDashboard}
             >
               <span>Open dashboard</span>

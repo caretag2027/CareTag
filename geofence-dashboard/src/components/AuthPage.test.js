@@ -2,9 +2,8 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import AuthPage from './AuthPage';
-import auth from '../auth';
 
-describe('AuthPage Component', () => {
+describe('AuthPage Component - Minimal Singla Sign In', () => {
   const mockOnLogin = jest.fn();
   const mockOnBackToLanding = jest.fn();
 
@@ -13,52 +12,38 @@ describe('AuthPage Component', () => {
     localStorage.clear();
   });
 
-  test('renders Caregiver Access Portal heading and elements with clear hierarchy', () => {
+  test('renders minimal Sign In portal with clean hierarchy and Back button', () => {
     render(<AuthPage onLogin={mockOnLogin} onBackToLanding={mockOnBackToLanding} />);
 
     // Check heading
-    const heading = screen.getByRole('heading', { name: /caregiver access portal/i });
+    const heading = screen.getByRole('heading', { name: /sign in/i });
     expect(heading).toBeInTheDocument();
-
-    // Check inputs
-    expect(screen.getByLabelText(/login id \/ institutional email/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/session password/i)).toBeInTheDocument();
-
-    // Check submit button
-    expect(screen.getByRole('button', { name: /sign in to dashboard/i })).toBeInTheDocument();
 
     // Check Back to Home button
     expect(screen.getByRole('button', { name: /back to home/i })).toBeInTheDocument();
+
+    // Check subtle disclosure for manual entry
+    expect(screen.getByRole('button', { name: /or enter credentials manually/i })).toBeInTheDocument();
   });
 
-  test('renders dedicated test persona chips and handles selection', () => {
+  test('renders ONLY Bhavishya Singla login and does not show other personas', () => {
     render(<AuthPage onLogin={mockOnLogin} onBackToLanding={mockOnBackToLanding} />);
 
+    // Bhavishya Singla is present
     expect(screen.getByText(/bhavishya singla/i)).toBeInTheDocument();
-    expect(screen.getByText(/dr\. rajesh sharma/i)).toBeInTheDocument();
+    expect(screen.getByText(/singla_be23@thapar.edu/i)).toBeInTheDocument();
 
-    // Click Dr. Rajesh Sharma chip
-    const sharmaBtn = screen.getByRole('button', { name: /dr\. rajesh sharma/i });
-    fireEvent.click(sharmaBtn);
-
-    const emailInput = screen.getByLabelText(/login id \/ institutional email/i);
-    expect(emailInput.value).toBe('dr.sharma@thapar.edu');
+    // Other personas are NOT present
+    expect(screen.queryByText(/dr\. rajesh sharma/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/priya singla/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/ananya verma/i)).not.toBeInTheDocument();
   });
 
-  test('calls onBackToLanding when Back to Home is clicked', () => {
+  test('1-click Singla action immediately logs in as Bhavishya Singla', async () => {
     render(<AuthPage onLogin={mockOnLogin} onBackToLanding={mockOnBackToLanding} />);
 
-    const backBtn = screen.getByRole('button', { name: /back to home/i });
-    fireEvent.click(backBtn);
-
-    expect(mockOnBackToLanding).toHaveBeenCalledTimes(1);
-  });
-
-  test('submits valid institutional credentials and calls onLogin', async () => {
-    render(<AuthPage onLogin={mockOnLogin} onBackToLanding={mockOnBackToLanding} />);
-
-    const submitBtn = screen.getByRole('button', { name: /sign in to dashboard/i });
-    fireEvent.click(submitBtn);
+    const singlaBtn = screen.getByRole('button', { name: /sign in as bhavishya singla/i });
+    fireEvent.click(singlaBtn);
 
     await waitFor(() => {
       expect(mockOnLogin).toHaveBeenCalledTimes(1);
@@ -71,14 +56,61 @@ describe('AuthPage Component', () => {
     });
   });
 
-  test('instant demo sign in logs in immediately', async () => {
+  test('calls onBackToLanding when Back to Home is clicked', () => {
     render(<AuthPage onLogin={mockOnLogin} onBackToLanding={mockOnBackToLanding} />);
 
-    const instantBtn = screen.getByRole('button', { name: /instant demo sign in/i });
-    fireEvent.click(instantBtn);
+    const backBtn = screen.getByRole('button', { name: /back to home/i });
+    fireEvent.click(backBtn);
+
+    expect(mockOnBackToLanding).toHaveBeenCalledTimes(1);
+  });
+
+  test('expands manual credentials form and submits successfully', async () => {
+    render(<AuthPage onLogin={mockOnLogin} onBackToLanding={mockOnBackToLanding} />);
+
+    // Initially inputs are hidden
+    expect(screen.queryByLabelText(/login id \/ institutional email/i)).not.toBeInTheDocument();
+
+    // Click toggle to reveal
+    const toggleBtn = screen.getByRole('button', { name: /or enter credentials manually/i });
+    fireEvent.click(toggleBtn);
+
+    // Inputs now visible
+    expect(screen.getByLabelText(/login id \/ institutional email/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/session password/i)).toBeInTheDocument();
+
+    // Submit form
+    const submitBtn = screen.getByRole('button', { name: /sign in to dashboard/i });
+    fireEvent.click(submitBtn);
 
     await waitFor(() => {
       expect(mockOnLogin).toHaveBeenCalledTimes(1);
+      expect(mockOnLogin).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: 'singla_be23@thapar.edu',
+        })
+      );
+    });
+  });
+
+  test('shows error when invalid manual credentials submitted', async () => {
+    render(<AuthPage onLogin={mockOnLogin} onBackToLanding={mockOnBackToLanding} />);
+
+    // Reveal form
+    fireEvent.click(screen.getByRole('button', { name: /or enter credentials manually/i }));
+
+    const emailInput = screen.getByLabelText(/login id \/ institutional email/i);
+    const passwordInput = screen.getByLabelText(/session password/i);
+
+    fireEvent.change(emailInput, { target: { value: 'unknown@user.com' } });
+    fireEvent.change(passwordInput, { target: { value: 'wrongpass' } });
+
+    const submitBtn = screen.getByRole('button', { name: /sign in to dashboard/i });
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+      expect(mockOnLogin).not.toHaveBeenCalled();
     });
   });
 });
