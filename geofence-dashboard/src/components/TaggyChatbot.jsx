@@ -519,8 +519,8 @@ What would you like help with?`
       // Local dev or non-worker mode, proceed to direct Groq API
     }
 
-    // ── 2. Direct Groq API Fallback ──
-    if (!replyText && isOnline) {
+    // ── 2. Direct Groq API Fallback (Only if client key explicitly provided) ──
+    if (!replyText && isOnline && GROQ_API_KEY) {
       for (const model of GROQ_MODELS) {
         try {
           const directRes = await fetch(GROQ_DIRECT_ENDPOINT, {

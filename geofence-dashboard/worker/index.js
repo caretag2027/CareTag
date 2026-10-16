@@ -426,7 +426,7 @@ export default {
             configured: true,
             readyForSetup: true,
             config: {
-              apiKey: env.FIREBASE_API_KEY || 'AIzaSyA8fyc0kRAsNV1hRcI4g-bkdFd34GOW5Nk',
+              apiKey: env.FIREBASE_API_KEY || '',
               authDomain: env.FIREBASE_AUTH_DOMAIN || 'smart-band-7de19.firebaseapp.com',
               databaseURL: env.FIREBASE_DATABASE_URL || 'https://smart-band-7de19-default-rtdb.asia-southeast1.firebasedatabase.app',
               projectId: env.FIREBASE_PROJECT_ID || 'smart-band-7de19',

@@ -29,7 +29,7 @@ import {
 } from './utils/dashboardUtils';
 
 export const FIREBASE_CONFIG = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "AIzaSyA8fyc0kRAsNV1hRcI4g-bkdFd34GOW5Nk",
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "",
   authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || "smart-band-7de19.firebaseapp.com",
   databaseURL: process.env.REACT_APP_FIREBASE_DATABASE_URL || "https://smart-band-7de19-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || "smart-band-7de19",
@@ -37,7 +37,7 @@ export const FIREBASE_CONFIG = {
   messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || "673896145526",
   appId: process.env.REACT_APP_FIREBASE_APP_ID || "1:673896145526:web:199737a1183586dfb6f557",
   measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID || "G-9M1VLF71W2",
-  userUid: "V68ovsSKeqRlyIdh2xoJV7EizVq1",
+  userUid: process.env.REACT_APP_FIREBASE_USER_UID || "V68ovsSKeqRlyIdh2xoJV7EizVq1",
 };
 
 // Singleton App & Database instances
@@ -46,6 +46,10 @@ let database = null;
 
 export function getFirebaseApp() {
   if (app) return app;
+  if (!FIREBASE_CONFIG.apiKey) {
+    // When client-side API key is omitted, client safely delegates telemetry syncing to Cloudflare Edge Worker (/api/hardware/telemetry)
+    return null;
+  }
   try {
     app = getApps().length > 0 ? getApp() : initializeApp(FIREBASE_CONFIG);
     return app;

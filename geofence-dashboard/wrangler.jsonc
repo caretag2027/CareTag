@@ -21,7 +21,6 @@
     }
   ],
   "vars": {
-    "FIREBASE_API_KEY": "AIzaSyA8fyc0kRAsNV1hRcI4g-bkdFd34GOW5Nk",
     "FIREBASE_AUTH_DOMAIN": "smart-band-7de19.firebaseapp.com",
     "FIREBASE_DATABASE_URL": "https://smart-band-7de19-default-rtdb.asia-southeast1.firebasedatabase.app",
     "FIREBASE_PROJECT_ID": "smart-band-7de19",

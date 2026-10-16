@@ -320,6 +320,13 @@ function App() {
   const [session, setSession] = useState(() => auth.getSession());
   const [view, setView] = useState('landing');
 
+  // Enforce private dashboard isolation: redirect to auth if attempting to access dashboard unauthenticated
+  useEffect(() => {
+    if (view === 'dashboard' && !session) {
+      setView('auth');
+    }
+  }, [view, session]);
+
   const handleLaunchDashboard = () => {
     if (session) {
       setView('dashboard');
@@ -361,7 +368,7 @@ function App() {
       )}
 
       {view === 'landing' && <TaggyChatbot />}
-      <CookieBanner />
+      {view === 'landing' && <CookieBanner />}
     </>
   );
 }
@@ -373,6 +380,11 @@ function App() {
 function Dashboard({ session, onLogout, onGoToLanding }) {
   const userId = session.userId;
   const deviceKey = session.deviceKey || 'CARE-TAG-01';
+
+  // Dynamic profile metadata derived from authenticated session
+  const monitoredName = session?.childName || session?.monitoredName || session?.name || 'Monitored Profile';
+  const monitoredInitial = (monitoredName.trim().charAt(0) || 'C').toUpperCase();
+  const deviceDisplayName = session?.deviceDisplayName || `${monitoredName.split(' ')[0]}'s Smart Band`;
 
   // ── Core Data state ──
   const [latest, setLatest] = useState(null);
@@ -738,12 +750,12 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
           </button>
 
           {/* Child Active Profile Pill */}
-          <div className="child-profile-pill" title="Monitored Child Profile">
+          <div className="child-profile-pill" title={`Monitored Profile: ${monitoredName}`}>
             <div className="child-avatar">
-              <span>B</span>
+              <span>{monitoredInitial}</span>
             </div>
             <div className="child-meta">
-              <span className="child-name">Bhavishya Singla</span>
+              <span className="child-name">{monitoredName}</span>
               <span className="child-device-tag">
                 {isLiveHardwareMode ? 'Smart Band ESP32' : `Sim: ${activeScenario || 'Active'}`}
               </span>
@@ -1112,7 +1124,7 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
                   <div className="map-popup-card">
                     <div className="map-popup-header">
                       <ShieldCheck size={14} color="#0D9488" />
-                      <strong>Bhavishya&apos;s Smart Band</strong>
+                      <strong>{deviceDisplayName}</strong>
                     </div>
                     <p className="map-popup-sub">
                       Status: {latest.packet?.motionState || 'Normal'}
