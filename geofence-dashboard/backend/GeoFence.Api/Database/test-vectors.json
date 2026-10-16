@@ -1,0 +1,38 @@
+[
+  {
+    "deviceKey": "DEVICE123",
+    "packetType": "heartbeat",
+    "capturedAtUtc": "2026-08-09T06:00:00Z",
+    "latitude": 30.3398,
+    "longitude": 76.3869,
+    "speedKph": 0,
+    "headingDegrees": 0,
+    "accuracyMeters": 8,
+    "batteryPercent": 87,
+    "gpsEnabled": false,
+    "motionState": "still",
+    "routineState": "home",
+    "deviationScore": 0.02,
+    "signalRssi": -72,
+    "rawPayload": "{\"sample\":true}",
+    "correlationId": "tv-1"
+  },
+  {
+    "deviceKey": "DEVICE123",
+    "packetType": "movement",
+    "capturedAtUtc": "2026-08-09T06:12:30Z",
+    "latitude": 30.3456,
+    "longitude": 76.3921,
+    "speedKph": 34.5,
+    "headingDegrees": 112.3,
+    "accuracyMeters": 12,
+    "batteryPercent": 82,
+    "gpsEnabled": true,
+    "motionState": "moving",
+    "routineState": "away",
+    "deviationScore": 0.82,
+    "signalRssi": -65,
+    "rawPayload": "{\"sample\":true}",
+    "correlationId": "tv-2"
+  }
+]
