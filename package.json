@@ -1,0 +1,13 @@
+{
+  "name": "caretag",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CareTag - GPS Behavioral Monitoring & Safety Dashboard",
+  "scripts": {
+    "build": "cd geofence-dashboard && npm install && npm run build",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.151.0"
+  }
+}
