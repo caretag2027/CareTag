@@ -8,7 +8,6 @@
  * not fabricated. If no data exists for a month, it shows as empty.
  */
 
-import { userKey } from './auth';
 import { getMonthlyAlertStats } from './alertStore';
 import { getMonthlyBatteryStats } from './batteryStore';
 

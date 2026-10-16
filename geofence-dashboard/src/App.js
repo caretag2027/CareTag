@@ -1,14 +1,15 @@
 import {
-  AlertTriangle, Battery, BatteryLow, Bell, BellOff, CheckCircle, ChevronRight,
+  AlertTriangle, Battery, BatteryLow, Bell, CheckCircle, ChevronRight,
   Crosshair, LogOut, MapPin, PanelRightClose, PanelRightOpen, Play, Pause,
   Shield, ShieldAlert, ShieldCheck, Trash2, TrendingDown, TrendingUp,
-  User, Volume2, VolumeX, Wifi, WifiOff, X, Radio, Zap, BarChart3, Clock, Eye
+  User, Volume2, VolumeX, Wifi, WifiOff, X, Radio, Zap, BarChart3, Clock, Eye,
+  EyeOff, Cloud, Sparkles, ArrowRight, Activity
 } from 'lucide-react';
 import {
   Circle, MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents
 } from 'react-leaflet';
 import L from 'leaflet';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import api from './api';
 import simulation from './simulation';
 import { startSignalR, stopSignalR } from './signalr';
@@ -84,31 +85,75 @@ function Sparkline({ data, width = 200, height = 40, color = '#10b981' }) {
 }
 
 /* ──────────────────────────────────────────────────────────────
-   Auth Page (Login / Register)
+   Auth Page (Login / Register) with Cloudflare Backend & Quick Demo
    ────────────────────────────────────────────────────────────── */
 function AuthPage({ onLogin }) {
   const [mode, setMode] = useState('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [role, setRole] = useState('guardian');
+  const [deviceKey, setDeviceKey] = useState('CARE-TAG-01');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [serverStatus, setServerStatus] = useState('checking');
+
+  // Verify Cloudflare backend connectivity
+  useEffect(() => {
+    fetch('/api/health')
+      .then(res => res.json())
+      .then(data => {
+        if (data.ok) setServerStatus('online');
+        else setServerStatus('local');
+      })
+      .catch(() => setServerStatus('local'));
+  }, []);
 
   async function handleSubmit(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
     setError('');
     setLoading(true);
     try {
       const result = mode === 'register'
-        ? await auth.register(name, email, password)
+        ? await auth.register(name, email, password, role, deviceKey)
         : await auth.login(email, password);
       if (result.ok) {
         onLogin(result.user);
       } else {
-        setError(result.error);
+        setError(result.error || 'Authentication failed');
       }
     } catch (err) {
-      setError(err.message || 'An error occurred');
+      setError(err.message || 'An unexpected error occurred');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // One-click quick login for testing
+  async function handleQuickLogin(demoEmail, demoRole, demoDevice) {
+    setEmail(demoEmail);
+    setPassword('caretag2026');
+    setError('');
+    setLoading(true);
+    try {
+      const result = await auth.login(demoEmail, 'caretag2026');
+      if (result.ok) {
+        onLogin(result.user);
+      } else {
+        // If not in KV yet, register it directly
+        const reg = await auth.register(
+          demoRole === 'caregiver' ? 'Marcus Vance, RN' : 'Dr. Sarah Jenkins',
+          demoEmail,
+          'caretag2026',
+          demoRole,
+          demoDevice
+        );
+        if (reg.ok) onLogin(reg.user);
+        else setError(reg.error);
+      }
+    } catch (err) {
+      setError(err.message || 'Quick login failed');
     } finally {
       setLoading(false);
     }
@@ -117,40 +162,181 @@ function AuthPage({ onLogin }) {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="auth-logo">
-          <MapPin size={28} />
-          <h1>CareTag</h1>
-          <p>GPS Behavioral Monitoring & Safety Dashboard</p>
+        {/* Status Badge */}
+        <div className="auth-edge-badge">
+          <span className={`edge-dot ${serverStatus === 'online' ? 'edge-dot--online' : 'edge-dot--local'}`} />
+          <span>{serverStatus === 'online' ? 'Cloudflare Workers KV Active' : 'Edge Sync Ready'}</span>
         </div>
-        <form onSubmit={handleSubmit}>
-          {mode === 'register' && (
-            <div className="form-group">
-              <label>Full Name</label>
-              <input type="text" placeholder="e.g., John Doe" value={name}
-                onChange={e => setName(e.target.value)} required />
-            </div>
-          )}
-          <div className="form-group">
-            <label>Email</label>
-            <input type="email" placeholder="you@example.com" value={email}
-              onChange={e => setEmail(e.target.value)} required />
+
+        {/* Brand Header */}
+        <div className="auth-logo">
+          <div className="auth-logo-icon">
+            <ShieldCheck size={32} />
           </div>
+          <h1>CareTag</h1>
+          <p>GPS Behavioral Monitoring & Real-time Geofence Intelligence</p>
+        </div>
+
+        {/* Mode Tabs */}
+        <div className="auth-tabs">
+          <button
+            type="button"
+            className={`auth-tab ${mode === 'login' ? 'active' : ''}`}
+            onClick={() => { setMode('login'); setError(''); }}
+          >
+            Sign In
+          </button>
+          <button
+            type="button"
+            className={`auth-tab ${mode === 'register' ? 'active' : ''}`}
+            onClick={() => { setMode('register'); setError(''); }}
+          >
+            Create Account
+          </button>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="auth-form">
+          {mode === 'register' && (
+            <>
+              <div className="form-group">
+                <label>Full Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Dr. Sarah Jenkins"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Role</label>
+                <div className="auth-role-select">
+                  <button
+                    type="button"
+                    className={`role-chip ${role === 'guardian' ? 'active' : ''}`}
+                    onClick={() => setRole('guardian')}
+                  >
+                    Family Guardian
+                  </button>
+                  <button
+                    type="button"
+                    className={`role-chip ${role === 'caregiver' ? 'active' : ''}`}
+                    onClick={() => setRole('caregiver')}
+                  >
+                    Clinical Caregiver
+                  </button>
+                  <button
+                    type="button"
+                    className={`role-chip ${role === 'admin' ? 'active' : ''}`}
+                    onClick={() => setRole('admin')}
+                  >
+                    Administrator
+                  </button>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>Device Tag ID</label>
+                <input
+                  type="text"
+                  placeholder="CARE-TAG-01"
+                  value={deviceKey}
+                  onChange={e => setDeviceKey(e.target.value)}
+                  required
+                />
+              </div>
+            </>
+          )}
+
+          <div className="form-group">
+            <label>Email Address</label>
+            <input
+              type="email"
+              placeholder="name@example.com"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+            />
+          </div>
+
           <div className="form-group">
             <label>Password</label>
-            <input type="password" placeholder="••••••••" value={password}
-              onChange={e => setPassword(e.target.value)} required minLength={4} />
+            <div className="password-input-wrapper">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="••••••••"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                minLength={4}
+              />
+              <button
+                type="button"
+                className="password-toggle-btn"
+                onClick={() => setShowPassword(p => !p)}
+                tabIndex={-1}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
-          {error && <div className="auth-error"><AlertTriangle size={14} /> {error}</div>}
-          <button type="submit" className="btn btn-primary" disabled={loading} style={{ width: '100%' }}>
-            {loading ? <span className="spinner" /> : mode === 'register' ? 'Create Account' : 'Sign In'}
+
+          {error && (
+            <div className="auth-error">
+              <AlertTriangle size={15} />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            className="btn btn-primary auth-submit-btn"
+            disabled={loading}
+          >
+            {loading ? (
+              <span className="spinner" />
+            ) : mode === 'register' ? (
+              <>Create Account <ArrowRight size={16} /></>
+            ) : (
+              <>Sign In <ArrowRight size={16} /></>
+            )}
           </button>
         </form>
-        <div className="auth-switch">
-          {mode === 'login' ? (
-            <p>Don't have an account? <button onClick={() => { setMode('register'); setError(''); }}>Register</button></p>
-          ) : (
-            <p>Already have an account? <button onClick={() => { setMode('login'); setError(''); }}>Sign In</button></p>
-          )}
+
+        {/* Quick Demo Logins */}
+        <div className="auth-quick-demo">
+          <div className="quick-demo-divider">
+            <span>or instant test access</span>
+          </div>
+          <div className="quick-demo-buttons">
+            <button
+              type="button"
+              className="quick-demo-btn"
+              onClick={() => handleQuickLogin('demo@caretag.io', 'guardian', 'CARE-TAG-01')}
+              disabled={loading}
+            >
+              <Sparkles size={14} />
+              <span>Demo Guardian</span>
+            </button>
+            <button
+              type="button"
+              className="quick-demo-btn"
+              onClick={() => handleQuickLogin('caregiver@caretag.io', 'caregiver', 'CARE-TAG-02')}
+              disabled={loading}
+            >
+              <Activity size={14} />
+              <span>Demo Caregiver</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Footer Note */}
+        <div className="auth-footer-note">
+          <Cloud size={13} />
+          <span>Cloudflare Edge Worker • Real-time Firebase Ready</span>
         </div>
       </div>
     </div>
@@ -326,7 +512,7 @@ function Dashboard({ session, onLogout }) {
 
         // Low battery alert
         if (packet.batteryPercent < 20) {
-          const saved = alertStore.saveAlert(userId, {
+          alertStore.saveAlert(userId, {
             type: 'low_battery',
             latitude: packet.latitude,
             longitude: packet.longitude,
@@ -605,9 +791,13 @@ function Dashboard({ session, onLogout }) {
           </div>
 
           {/* User menu */}
-          <div className="user-badge">
+          <div className="user-badge" title={`Signed in as ${session.email} • Device: ${session.deviceKey || 'CARE-TAG-01'}`}>
             <User size={14} />
-            <span>{session.name}</span>
+            <div className="user-badge-details">
+              <span className="user-name">{session.name}</span>
+              <span className="user-role-badge">{session.role || 'guardian'}</span>
+            </div>
+            <span className="device-tag-badge">{session.deviceKey || 'CARE-TAG-01'}</span>
             <button className="icon-btn" onClick={onLogout} title="Logout"><LogOut size={14} /></button>
           </div>
 
