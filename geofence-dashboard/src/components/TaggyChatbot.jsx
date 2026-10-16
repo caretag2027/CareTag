@@ -35,9 +35,16 @@ function buildSystemPrompt(appState = {}) {
     currentView = 'landing',
     activeTab = 'overview',
     bandStatus = {},
+    hardwareStatus = {},
     geofences = [],
     alerts = [],
+    latest = null,
   } = appState;
+
+  const effectiveBand = hardwareStatus?.connected !== undefined ? hardwareStatus : (bandStatus || {});
+  const isConnected = effectiveBand.connected !== undefined ? Boolean(effectiveBand.connected) : true;
+  const isStale = Boolean(effectiveBand.isStale);
+  const batteryPercent = latest?.batteryPercent ?? effectiveBand.batteryPercent ?? 92;
 
   const zoneCount = geofences.length;
   const zoneNames = zoneCount > 0 ? geofences.map(g => g.label).join(', ') : 'None configured';
@@ -45,7 +52,7 @@ function buildSystemPrompt(appState = {}) {
 
   const contextSnippet = `APPLICATION CONTEXT:
 - Current View: ${currentView === 'dashboard' ? `Dashboard (${activeTab} tab)` : 'CareTag Home & Product Page'}
-- Smart Band: ${bandStatus.connected ? 'Connected' : 'Offline / Reconnecting'} (Battery: ${bandStatus.batteryPercent ?? 92}%, Telemetry freshness: ${bandStatus.isStale ? 'Stale / Delayed' : 'Fresh live updates'})
+- Smart Band: ${isConnected ? 'Connected' : 'Offline / Reconnecting'} (Battery: ${batteryPercent}%, Telemetry freshness: ${isStale ? 'Stale / Delayed' : 'Fresh live updates'})
 - Safe Places: ${zoneCount > 0 ? `${zoneCount} safe places configured (${zoneNames})` : 'No safe places configured yet'}
 - Recent Alert: ${topAlert ? `${topAlert.type}: "${topAlert.message}" (${new Date(topAlert.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})` : 'No active alerts'}`;
 
@@ -478,22 +485,36 @@ What would you like help with?`
     setIsLoading(true);
 
     // Exact preset check
-    const matchedPreset = CAREGIVER_PRESETS.find(
-      q => q.prompt.toLowerCase() === textToSend.toLowerCase() ||
-           textToSend.toLowerCase().includes(q.label.toLowerCase()) ||
-           q.label.toLowerCase().includes(textToSend.toLowerCase())
-    );
+    const cleanInput = textToSend.trim().toLowerCase().replace(/[?!.,]/g, '');
+    const matchedPreset = CAREGIVER_PRESETS.find(q => {
+      const p = q.prompt.trim().toLowerCase().replace(/[?!.,]/g, '');
+      const l = q.label.trim().toLowerCase().replace(/[?!.,]/g, '');
+      return cleanInput === p || cleanInput === l || textToSend.toLowerCase() === q.prompt.toLowerCase();
+    });
 
     let replyText = null;
     let replyActionTab = matchedPreset?.actionTab || null;
     let replyActionLabel = matchedPreset?.actionLabel || null;
 
+    if (!replyActionTab) {
+      if (/safe(\s*|-)?(place|zone)|geofence/i.test(textToSend)) {
+        replyActionTab = 'safezones';
+        replyActionLabel = 'Open Safe Places';
+      } else if (/alert|breach|notification/i.test(textToSend)) {
+        replyActionTab = 'alerts';
+        replyActionLabel = 'View Alerts';
+      } else if (/telemetry|inspector|sensor|hardware|model|formula/i.test(textToSend)) {
+        replyActionTab = 'inspector';
+        replyActionLabel = 'Open Technical Inspector';
+      }
+    }
+
     const systemPrompt = buildSystemPrompt(appState);
     const groqPayloadMessages = [
       { role: 'system', content: systemPrompt },
-      ...newMessages.slice(-5).map(m => ({
+      ...newMessages.slice(-6).map(m => ({
         role: m.sender === 'user' ? 'user' : 'assistant',
-        content: m.text
+        content: (m.text || '').replace(/<details[^>]*>[\s\S]*?<\/details>/gi, '').trim().slice(0, 1000)
       }))
     ];
 

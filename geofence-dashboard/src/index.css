@@ -1883,7 +1883,8 @@ body {
    AUTH PAGE OVERHAUL (Minimal Light Theme · Dedicated Access)
    ============================================================ */
 
-.auth-page {
+.auth-page,
+.auth-fullscreen-container {
   min-height: 100vh;
   background: radial-gradient(ellipse 90% 60% at 50% -10%, #E0F2FE 0%, #F8FAFC 65%);
   display: flex;
@@ -1976,20 +1977,23 @@ body {
   color: #0F766E;
 }
 
-.auth-title {
-  font-size: 1.45rem;
+.auth-title,
+#auth-card-title,
+.auth-card-header h2 {
+  font-size: 1.55rem;
   font-weight: 700;
-  color: #0B2D5B;
+  color: #0B2D5B !important;
   letter-spacing: -0.02em;
   margin: 0 0 6px 0;
 }
 
-.auth-subtitle {
-  color: #64748B;
-  font-size: 0.84rem;
+.auth-subtitle,
+.auth-card-header p {
+  color: #475569 !important;
+  font-size: 0.88rem;
   line-height: 1.5;
   margin: 0;
-  max-width: 340px;
+  max-width: 360px;
 }
 
 .auth-form {

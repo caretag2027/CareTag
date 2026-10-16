@@ -261,19 +261,15 @@ export default function HeroRoutineSimulation() {
         </div>
       </div>
 
-      {/* ── B. Day Selector & Playback Controls ── */}
+      {/* ── B. Day Selector & Playback Controls (Clean Segmented Control) ── */}
       <div className="sim-day-bar">
         <div className="sim-day-stepper" role="tablist" aria-label="Select demonstration day">
           {DAYS.map((day, idx) => {
             const isActive = dayIndex === idx;
-            const stateClass =
+            const themeClass =
               isActive
-                ? day.type === 'deviation'
-                  ? 'btn--active-red'
-                  : day.type === 'learned'
-                  ? 'btn--active-green'
-                  : 'btn--active-blue'
-                : 'btn--inactive';
+                ? `tab--active tab--active-${day.theme}`
+                : 'tab--inactive';
 
             return (
               <button
@@ -281,12 +277,11 @@ export default function HeroRoutineSimulation() {
                 type="button"
                 role="tab"
                 aria-selected={isActive}
-                className={`sim-day-btn ${stateClass}`}
+                className={`sim-segmented-tab ${themeClass}`}
                 onClick={() => handleSelectDay(idx)}
               >
-                <span className="day-step-dot" />
-                <span className="day-step-name">{day.step}</span>
-                <span className="day-step-status">{day.statusShort}</span>
+                <span className="tab-step-name">{day.step}</span>
+                <span className="tab-step-status">{day.statusShort}</span>
               </button>
             );
           })}
@@ -574,10 +569,10 @@ export default function HeroRoutineSimulation() {
           )}
         </svg>
 
-        {/* ── Home Geofence Label (Positioned at top circular boundary) ── */}
+        {/* ── Home Geofence Label ── */}
         <div className="sim-geofence-label-wrap sim-geofence-label--home">
-          <span className="geofence-tag tag--home">
-            <span className="label-dot dot--blue" />
+          <span className="sim-geofence-label label--home">
+            <span className="label-indicator-dot dot--blue" />
             <span>Home Geofence</span>
           </span>
         </div>
@@ -589,10 +584,10 @@ export default function HeroRoutineSimulation() {
           </div>
         </div>
 
-        {/* ── School Geofence Label (Positioned at top circular boundary) ── */}
+        {/* ── School Geofence Label ── */}
         <div className="sim-geofence-label-wrap sim-geofence-label--school">
-          <span className="geofence-tag tag--school">
-            <span className="label-dot dot--teal" />
+          <span className="sim-geofence-label label--school">
+            <span className="label-indicator-dot dot--teal" />
             <span>School Geofence</span>
           </span>
         </div>

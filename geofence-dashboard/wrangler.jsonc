@@ -17,9 +17,12 @@
   "kv_namespaces": [
     {
       "binding": "CARETAG_KV",
-      "id": "f2b433a0757c4517bf4e73298cbb5b54"
+      "id": "c4bc3f919a1c4d51b70854c6eeedc6e0"
     }
   ],
+  "ai": {
+    "binding": "AI"
+  },
   "vars": {
     "FIREBASE_AUTH_DOMAIN": "smart-band-7de19.firebaseapp.com",
     "FIREBASE_DATABASE_URL": "https://smart-band-7de19-default-rtdb.asia-southeast1.firebasedatabase.app",

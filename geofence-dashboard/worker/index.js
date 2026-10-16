@@ -633,7 +633,7 @@ export default {
           }
         }
 
-        // ── AI CHAT: /api/chat (Groq Cloudflare Edge Proxy) ──
+        // ── AI CHAT: /api/chat (Groq Cloudflare Edge Proxy & Workers AI) ──
         if (url.pathname === '/api/chat' && request.method === 'POST') {
           const body = await request.json().catch(() => ({}));
           const { messages, model = 'qwen/qwen3.8-27b' } = body;
@@ -643,8 +643,14 @@ export default {
             return error('Messages array is required');
           }
 
-          // Try primary model
-          const primaryModels = [model, 'qwen/qwen3.8-27b', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
+          // 1. Try Groq fast inference first with validated models
+          const primaryModels = Array.from(new Set([
+            model,
+            'qwen/qwen3.8-27b',
+            'openai/gpt-oss-120b',
+            'openai/gpt-oss-20b',
+          ])).filter(Boolean);
+
           for (const m of primaryModels) {
             try {
               const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -656,17 +662,45 @@ export default {
                 body: JSON.stringify({
                   model: m,
                   messages,
-                  max_tokens: 450,
+                  max_tokens: 500,
                   temperature: 0.35,
                 }),
               });
 
               if (groqRes.ok) {
                 const data = await groqRes.json();
-                return json(data);
+                const content = data.choices?.[0]?.message?.content;
+                if (content && content.trim().length > 0) {
+                  return json(data);
+                }
               }
             } catch (fetchErr) {
               // try next model
+            }
+          }
+
+          // 2. Cloudflare Workers AI Fallback if available
+          if (env.AI) {
+            try {
+              const cfAiRes = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+                messages,
+                max_tokens: 500,
+                temperature: 0.35,
+              });
+              if (cfAiRes?.response) {
+                return json({
+                  choices: [
+                    {
+                      message: {
+                        role: 'assistant',
+                        content: cfAiRes.response.trim(),
+                      },
+                    },
+                  ],
+                });
+              }
+            } catch (cfErr) {
+              // fall through
             }
           }
 

@@ -2,9 +2,8 @@ import {
   AlertTriangle, Bell, CheckCircle,
   Crosshair, LogOut, MapPin,
   Shield, ShieldCheck,
-  Radio, Clock, Eye,
-  EyeOff, ArrowRight,
-  Mail, Lock, ArrowLeft, Check, Terminal, Sliders, Maximize2, Minimize2,
+  Radio, Clock,
+  Check, Terminal, Sliders, Maximize2, Minimize2,
   Navigation
 } from 'lucide-react';
 import {
@@ -20,6 +19,7 @@ import CareTagLogo from './components/CareTagLogo';
 import LandingPage from './components/LandingPage';
 import TaggyChatbot from './components/TaggyChatbot';
 import CookieBanner from './components/CookieBanner';
+import AuthPage from './components/AuthPage';
 import {
   subscribeHardwareTelemetry,
   saveRoutineObservationToFirebase,
@@ -149,168 +149,8 @@ function MapResizeHandler({ isMapExpanded }) {
 }
 
 /* ──────────────────────────────────────────────────────────────
-   Minimal Light-Themed Auth Page (Dedicated Institutional Login)
+   Caregiver Access Portal (Rendered via ./components/AuthPage)
    ────────────────────────────────────────────────────────────── */
-function AuthPage({ onLogin, onBackToLanding }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [autoFilled, setAutoFilled] = useState(false);
-
-  const handleFillTestAccount = () => {
-    setEmail('Singla_BE23@thapar.edu');
-    setPassword('12345');
-    setError('');
-    setAutoFilled(true);
-    setTimeout(() => setAutoFilled(false), 2500);
-  };
-
-  async function handleSubmit(e) {
-    if (e) e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      const result = await auth.login(email, password);
-      if (result.ok) {
-        onLogin(result.user);
-      } else {
-        setError(result.error || 'Authentication failed. Please verify your Login ID and password.');
-      }
-    } catch (err) {
-      setError(err.message || 'An unexpected error occurred. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="auth-fullscreen-container">
-      <div className="auth-header-bar">
-        <button
-          type="button"
-          className="auth-back-btn"
-          onClick={onBackToLanding}
-          title="Return to CareTag Home"
-        >
-          <ArrowLeft size={16} />
-          <span>Back to Home</span>
-        </button>
-
-        <CareTagLogo variant="horizontal" size="sm" showTagline={false} />
-      </div>
-
-      <div className="auth-card" role="region" aria-labelledby="auth-card-title">
-        <div className="auth-card-header">
-          <div className="auth-card-icon-wrap">
-            <ShieldCheck size={28} color="#0D9488" />
-          </div>
-          <h2 id="auth-card-title">Caregiver Access Portal</h2>
-          <p>Sign in to view real-time smart band telemetry, safe places &amp; alerts.</p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="auth-form" noValidate>
-          <div className="auth-form-group">
-            <label htmlFor="auth-email">Login ID / Institutional Email</label>
-            <div className="auth-input-wrapper">
-              <Mail size={16} className="auth-input-icon" />
-              <input
-                id="auth-email"
-                type="text"
-                autoComplete="username"
-                placeholder="e.g. Singla_BE23@thapar.edu"
-                value={email}
-                onChange={e => { setEmail(e.target.value); if (error) setError(''); }}
-                required
-                autoFocus
-              />
-            </div>
-          </div>
-
-          <div className="auth-form-group">
-            <label htmlFor="auth-password">Session Password</label>
-            <div className="auth-input-wrapper">
-              <Lock size={16} className="auth-input-icon" />
-              <input
-                id="auth-password"
-                type={showPassword ? 'text' : 'password'}
-                autoComplete="current-password"
-                placeholder="Enter assigned password"
-                value={password}
-                onChange={e => { setPassword(e.target.value); if (error) setError(''); }}
-                required
-              />
-              <button
-                type="button"
-                className="password-toggle-btn"
-                onClick={() => setShowPassword(p => !p)}
-                tabIndex={-1}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-          </div>
-
-          {error && (
-            <div className="auth-error-banner" role="alert">
-              <AlertTriangle size={15} />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <button
-            type="submit"
-            className="auth-submit-btn"
-            disabled={loading}
-          >
-            {loading ? (
-              <span className="auth-spinner" />
-            ) : (
-              <>
-                <span>Sign In to Dashboard</span>
-                <ArrowRight size={16} />
-              </>
-            )}
-          </button>
-        </form>
-
-        <div className="auth-test-helper">
-          <div className="auth-test-helper-content">
-            <div className="auth-test-helper-title">
-              <span className="auth-test-helper-dot" />
-              <span>Dedicated Test Account</span>
-            </div>
-            <div className="auth-test-helper-code">
-              <code>Singla_BE23@thapar.edu</code> &bull; <code>12345</code>
-            </div>
-          </div>
-          <button
-            type="button"
-            className={`auth-test-helper-btn ${autoFilled ? 'is-filled' : ''}`}
-            onClick={handleFillTestAccount}
-            title="Auto-fill test credentials"
-          >
-            {autoFilled ? (
-              <>
-                <Check size={12} />
-                <span>Filled</span>
-              </>
-            ) : (
-              <span>Fill ID</span>
-            )}
-          </button>
-        </div>
-
-        <div className="auth-footer-note">
-          <Lock size={12} />
-          <span>Protected Session &bull; Authorized Institutional Access Only</span>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* ──────────────────────────────────────────────────────────────
    Main App: Landing Showcase, Auth, and Live Dashboard Views
@@ -367,7 +207,6 @@ function App() {
         />
       )}
 
-      {view === 'landing' && <TaggyChatbot />}
       {view === 'landing' && <CookieBanner />}
     </>
   );
@@ -1344,6 +1183,19 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
           </div>
         ))}
       </div>
+
+      {/* ── Taggy AI Companion Chatbot in Dashboard ── */}
+      <TaggyChatbot
+        currentView="dashboard"
+        activeTab={activeTab}
+        hardwareStatus={hardwareStatus}
+        geofences={geofences}
+        alerts={alerts}
+        latest={latest?.packet}
+        simRunning={simRunning}
+        onNavigateTab={(tab) => setActiveTab(tab)}
+        onOpenInspector={() => setActiveTab('inspector')}
+      />
     </div>
   );
 }
