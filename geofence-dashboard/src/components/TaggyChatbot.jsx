@@ -21,12 +21,27 @@ import {
 } from 'lucide-react';
 
 /* ──────────────────────────────────────────────────────────────
-   GROQ API & CLOUDFLARE EDGE CONFIGURATION
+   AI BACKEND & CLOUDFLARE EDGE CONFIGURATION
    ────────────────────────────────────────────────────────────── */
 const GROQ_API_KEY = process.env.REACT_APP_GROQ_API_KEY || '';
 const GROQ_DIRECT_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
-const CLOUDFLARE_EDGE_ENDPOINT = '/api/chat';
-const GROQ_MODELS = ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
+const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'];
+
+function getChatEndpoints() {
+  const endpoints = [];
+  if (process.env.REACT_APP_API_URL) {
+    endpoints.push(`${process.env.REACT_APP_API_URL}/api/chat`);
+  }
+  // Same-origin relative path (for production on workers.dev)
+  endpoints.push('/api/chat');
+  // Explicit worker origins (handles local dev on localhost:3000 where react-scripts doesn't have an API proxy)
+  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    endpoints.unshift('https://caretag.bhavishyasingla2005.workers.dev/api/chat');
+  } else {
+    endpoints.push('https://caretag.bhavishyasingla2005.workers.dev/api/chat');
+  }
+  return Array.from(new Set(endpoints));
+}
 
 /* ──────────────────────────────────────────────────────────────
    DYNAMIC SYSTEM PROMPT BUILDER (LANDING VS DASHBOARD)
@@ -456,6 +471,71 @@ function MarkdownRenderer({ content, isNested = false }) {
 }
 
 /* ──────────────────────────────────────────────────────────────
+   DOMAIN-AWARE OFFLINE ANSWER RESOLVER (NO DEFLECTIONS)
+   ────────────────────────────────────────────────────────────── */
+function getDomainOfflineAnswer(query = '', appState = {}) {
+  const q = query.toLowerCase();
+
+  // Team & Authors & University
+  if (/(team|who\s+(made|built|created|designed|developed)|authors|mentor|kapil\s+tomar|thapar|bhavishya|guneev|kinjal|manya|anureet)/i.test(q)) {
+    return `CareTag was developed as a university capstone project at **Thapar Institute of Engineering & Technology** (Batch of 2027) by:
+- **Core Team:** Kinjal, Guneev Taneja, Bhavishya Singla, Manya Sharma, and Anureet.
+- **Faculty Mentor:** Dr. Kapil Tomar.
+
+The team combined low-power IoT hardware engineering with machine learning routine monitoring to create an accessible, caregiver-focused safety wearable.`;
+  }
+
+  // Waterproofing & Durability
+  if (/(waterproof|water\s*resistant|swim|rain|splash|shower|bath|durab)/i.test(q)) {
+    return `The CareTag band prototype is housed in a **splash-resistant enclosure** (targeting IP54 protection). It is completely safe against rain, spills, and handwashing. However, it is not currently rated for swimming or full underwater submersion.`;
+  }
+
+  // SIM card & Cellular Connectivity
+  if (/(sim\s*card|cellular|gsm|gprs|2g|mobile\s*data|network|coverage|signal|offline\s*mode|no\s*internet)/i.test(q)) {
+    return `The band uses a **SIM800L cellular module** with standard GPRS/2G data to transmit coordinates and sensor telemetry to our Cloudflare edge backend. If the wearer enters an area with no cellular coverage, coordinates are automatically buffered in local flash memory and transmitted as soon as a signal is restored.`;
+  }
+
+  // GPS Accuracy & False Alarms
+  if (/(gps\s*accuracy|how\s*accurate|accuracy|drift|precision|false\s*alarm|jitter|hysteresis)/i.test(q)) {
+    return `CareTag uses a **u-blox Neo-6M GPS receiver** providing ~2.5-meter horizontal positioning accuracy under open sky. To prevent false alarms from GPS jitter, CareTag applies **45-meter spatial hysteresis** and temporal smoothing so parents only get alerted for genuine movements.`;
+  }
+
+  // Emergency / SOS Button
+  if (/(sos|emergency|panic\s*button|alarm\s*button|call\s*for\s*help)/i.test(q)) {
+    return `Yes! The smart band features a physical **SOS emergency trigger**. When pressed, it immediately dispatches an urgent priority alert with live satellite coordinates to the caregiver dashboard and connected contacts.`;
+  }
+
+  // Multiple children / bands
+  if (/(multiple\s*(child|children|kids|bands|devices)|more\s*than\s*one\s*child|add\s*another\s*band)/i.test(q)) {
+    return `Yes! CareTag supports monitoring multiple family bands under one caregiver account. Each child has a unique device ID (like CARE-TAG-01, CARE-TAG-02), and caregivers can toggle between children seamlessly on the dashboard map.`;
+  }
+
+  // Safe places / Geofencing limit
+  if (/(safe\s*place|geofence|how\s*many\s*(places|zones)|zone\s*limit|radius)/i.test(q)) {
+    return `You can configure multiple safe places (Home, School, Grandma's, Sports Field) on the map with custom radius boundaries (typically 50m to 500m) and optional active time schedules (e.g., School active Mon–Fri 8am–3pm).`;
+  }
+
+  // Pricing & Availability
+  if (/(price|cost|how\s*much|buy|purchase|order|shop|sale)/i.test(q)) {
+    return `CareTag is an academic capstone prototype developed at Thapar Institute of Engineering & Technology. The complete hardware bill of materials is under **$25**, and our interactive dashboard is free to test live right now.`;
+  }
+
+  // Greetings & Friendly chitchat
+  if (/^(hi|hello|hey|greetings|good\s*(morning|afternoon|evening))/i.test(q)) {
+    return `Hello! I'm Taggy, your CareTag companion. Ask me anything about our smart safety band, setting up safe places, battery life, or how our routine AI protects kids!`;
+  }
+
+  if (/(thank|thanks|great|awesome|cool|helpful)/i.test(q)) {
+    return `You're very welcome! Let me know if there's anything else about CareTag or your smart band you'd like to check.`;
+  }
+
+  // Direct, polite response for general queries when offline
+  return `I'm tuned specifically as CareTag's companion to help with our smart wearable band, safe places, battery status, routine AI, and alerts.
+
+If you'd like to test CareTag's features, you can explore the live dashboard or ask me about our hardware, routine-learning model, or safe zones!`;
+}
+
+/* ──────────────────────────────────────────────────────────────
    MAIN TAGGY CHATBOT COMPONENT
    ────────────────────────────────────────────────────────────── */
 export default function TaggyChatbot({
@@ -774,26 +854,31 @@ Click **Sign In** below to proceed to the caregiver login page.`,
       }))
     ];
 
-    // ── 1. Try Cloudflare Edge Worker Proxy (/api/chat) ──
-    try {
-      const edgeRes = await fetch(CLOUDFLARE_EDGE_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: groqPayloadMessages,
-          model: 'qwen/qwen3.8-27b'
-        })
-      });
+    // ── 1. Try Cloudflare Edge Worker Proxy across candidate endpoints ──
+    const candidateEndpoints = getChatEndpoints();
+    for (const endpoint of candidateEndpoints) {
+      if (replyText) break;
+      try {
+        const edgeRes = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: groqPayloadMessages,
+            model: 'llama-3.3-70b-versatile'
+          })
+        });
 
-      if (edgeRes.ok) {
-        const data = await edgeRes.json();
-        const content = data.choices?.[0]?.message?.content;
-        if (content && content.trim().length > 0) {
-          replyText = content.trim();
+        if (edgeRes.ok) {
+          const data = await edgeRes.json();
+          const content = data.choices?.[0]?.message?.content;
+          if (content && content.trim().length > 0) {
+            replyText = content.trim();
+            break;
+          }
         }
+      } catch {
+        // try next endpoint
       }
-    } catch {
-      // Local dev or non-worker mode, proceed to direct Groq API
     }
 
     // ── 2. Direct Groq API Fallback (Only if client key explicitly provided) ──
@@ -828,21 +913,9 @@ Click **Sign In** below to proceed to the caregiver login page.`,
       }
     }
 
-    // ── 3. Final Fallback if API was unavailable ──
+    // ── 3. Domain-Aware Offline Knowledge Base (When Edge AI & Groq are unreachable) ──
     if (!replyText) {
-      if (currentView === 'landing') {
-        replyText = `I'm here to answer questions about CareTag's smart child safety band, routine-learning AI, and real-time dashboard.
-
-Feel free to ask about our sensor hardware, 4-day routine learning, or click below to explore the live dashboard demo!`;
-        if (!replyActionType) {
-          replyActionType = 'launch_demo';
-          replyActionLabel = 'Open Live Demo';
-        }
-      } else {
-        replyText = `I'm here to help you monitor your child's safety with CareTag.
-
-You can check their location on the map, set up safe places in **Safe Places**, or review notifications in **Alerts**. If you are looking for specific technical documentation, you can open the Technical Inspector anytime.`;
-      }
+      replyText = getDomainOfflineAnswer(textToSend, appState);
     }
 
     const botMessageId = `bot-${Date.now()}`;
@@ -866,7 +939,7 @@ You can check their location on the map, set up safe places in **Safe Places**, 
   const starterQuestions = (currentView === 'landing' ? MARKETING_PRESETS : CAREGIVER_PRESETS).slice(0, 4);
 
   return (
-    <div className="taggy-bot-root">
+    <div className={`taggy-bot-root ${isOpen ? 'taggy-bot-root--open' : 'taggy-bot-root--closed'}`}>
       {/* ── Collapsed Launcher Trigger Button ── */}
       {!isOpen && (
         <div className="taggy-launcher-wrap">

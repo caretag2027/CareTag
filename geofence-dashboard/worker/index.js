@@ -636,71 +636,88 @@ export default {
         // ── AI CHAT: /api/chat (Groq Cloudflare Edge Proxy & Workers AI) ──
         if (url.pathname === '/api/chat' && request.method === 'POST') {
           const body = await request.json().catch(() => ({}));
-          const { messages, model = 'qwen/qwen3.8-27b' } = body;
+          const { messages, model = 'llama-3.3-70b-versatile' } = body;
           const apiKey = env.GROQ_API_KEY || '';
 
           if (!messages || !Array.isArray(messages)) {
             return error('Messages array is required');
           }
 
-          // 1. Try Groq fast inference first with validated models
+          // 1. Try Groq fast inference first with verified production models
+          const requestedModel = (!model || model.includes('qwen') || model.includes('gpt-oss')) 
+            ? 'llama-3.3-70b-versatile' 
+            : model;
+
           const primaryModels = Array.from(new Set([
-            model,
-            'qwen/qwen3.8-27b',
-            'openai/gpt-oss-120b',
-            'openai/gpt-oss-20b',
+            requestedModel,
+            'llama-3.3-70b-versatile',
+            'llama-3.1-8b-instant',
+            'mixtral-8x7b-32768',
           ])).filter(Boolean);
 
-          for (const m of primaryModels) {
-            try {
-              const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${apiKey}`,
-                },
-                body: JSON.stringify({
-                  model: m,
-                  messages,
-                  max_tokens: 500,
-                  temperature: 0.35,
-                }),
-              });
+          if (apiKey) {
+            for (const m of primaryModels) {
+              try {
+                const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`,
+                  },
+                  body: JSON.stringify({
+                    model: m,
+                    messages,
+                    max_tokens: 500,
+                    temperature: 0.35,
+                  }),
+                });
 
-              if (groqRes.ok) {
-                const data = await groqRes.json();
-                const content = data.choices?.[0]?.message?.content;
-                if (content && content.trim().length > 0) {
-                  return json(data);
+                if (groqRes.ok) {
+                  const data = await groqRes.json();
+                  const content = data.choices?.[0]?.message?.content;
+                  if (content && content.trim().length > 0) {
+                    return json(data);
+                  }
+                } else {
+                  const errText = await groqRes.text().catch(() => '');
+                  console.warn(`[Worker Groq] Model ${m} returned ${groqRes.status}:`, errText.slice(0, 200));
                 }
+              } catch (fetchErr) {
+                console.warn(`[Worker Groq] Fetch error for ${m}:`, fetchErr?.message || fetchErr);
               }
-            } catch (fetchErr) {
-              // try next model
             }
           }
 
-          // 2. Cloudflare Workers AI Fallback if available
+          // 2. Cloudflare Workers AI Fallback (Runs natively on Cloudflare edge GPUs)
           if (env.AI) {
-            try {
-              const cfAiRes = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
-                messages,
-                max_tokens: 500,
-                temperature: 0.35,
-              });
-              if (cfAiRes?.response) {
-                return json({
-                  choices: [
-                    {
-                      message: {
-                        role: 'assistant',
-                        content: cfAiRes.response.trim(),
-                      },
-                    },
-                  ],
+            const cfModels = [
+              '@cf/meta/llama-3.1-8b-instruct',
+              '@cf/meta/llama-3.1-8b-instruct-fp8',
+              '@cf/meta/llama-3.2-3b-instruct',
+            ];
+            for (const cfModel of cfModels) {
+              try {
+                const cfAiRes = await env.AI.run(cfModel, {
+                  messages,
+                  max_tokens: 500,
+                  temperature: 0.35,
                 });
+                const responseContent = cfAiRes?.response || (typeof cfAiRes === 'string' ? cfAiRes : null);
+                if (responseContent && responseContent.trim().length > 0) {
+                  return json({
+                    choices: [
+                      {
+                        message: {
+                          role: 'assistant',
+                          content: responseContent.trim(),
+                        },
+                      },
+                    ],
+                  });
+                }
+              } catch (cfErr) {
+                console.warn(`[Workers AI] ${cfModel} error:`, cfErr?.message || cfErr);
               }
-            } catch (cfErr) {
-              // fall through
             }
           }
 
