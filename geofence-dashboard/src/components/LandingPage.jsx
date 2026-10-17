@@ -620,39 +620,12 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
               </div>
             </div>
 
-            <div className="final-cta-right" aria-hidden="true">
-              <div className="preview-product-card preview-product-card--3d">
-                <div className="preview-card-header">
-                  <div className="preview-card-dots">
-                    <span className="dot dot-red" />
-                    <span className="dot dot-yellow" />
-                    <span className="dot dot-green" />
-                  </div>
-                  <span className="preview-card-title">CareTag Dashboard &bull; Live Preview</span>
-                  <span className="preview-status-pill">Interactive Demo</span>
-                </div>
-                <div className="preview-card-body">
-                  <div className="preview-3d-mock-wrap">
-                    <img
-                      src={dashboardPreview3d}
-                      alt="CareTag routine monitoring dashboard preview"
-                      className="preview-3d-img"
-                    />
-                  </div>
-                  <div className="preview-telemetry-row">
-                    <div className="preview-chip">
-                      <span className="chip-dot dot-green" />
-                      <span>ESP32 Band: Connected</span>
-                    </div>
-                    <div className="preview-chip">
-                      <span>Battery: 92%</span>
-                    </div>
-                    <div className="preview-chip chip-highlight">
-                      <span>Deviation score: 0.12 (Nominal)</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div className="final-cta-right">
+              <img
+                src={dashboardPreview3d}
+                alt="CareTag routine monitoring dashboard preview"
+                className="final-cta-preview-img"
+              />
             </div>
           </div>
         </div>

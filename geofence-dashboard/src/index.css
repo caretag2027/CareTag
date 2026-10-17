@@ -714,41 +714,12 @@ body {
   font-family: inherit;
 }
 
-/* ── A. Compact Header ── */
-.sim-header {
-  padding: 16px 24px 12px;
-  background: #FFFFFF;
-  border-bottom: 1px solid #F1F5F9;
-  text-align: left;
-}
-
-.sim-header-text {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.sim-title {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: #0B2D5B;
-  letter-spacing: -0.015em;
-  margin: 0;
-}
-
-.sim-subtitle {
-  font-size: 0.82rem;
-  color: #64748B;
-  margin: 0;
-  line-height: 1.35;
-}
-
-/* ── B. Day Selector & Playback Controls (Segmented Control) ── */
+/* ── A. Day Selector & Playback Controls (Segmented Control Top Bar) ── */
 .sim-day-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 24px;
+  padding: 14px 24px 12px;
   background: #FFFFFF;
   border-bottom: 1px solid #F1F5F9;
   gap: 12px;
@@ -757,9 +728,9 @@ body {
 .sim-day-stepper {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   background: #F1F5F9;
-  padding: 3px;
+  padding: 4px;
   border-radius: 10px;
   border: 1px solid #E2E8F0;
   overflow-x: auto;
@@ -774,19 +745,19 @@ body {
 .sim-segmented-tab {
   background: transparent;
   border: 1px solid transparent;
-  padding: 5px 12px;
-  border-radius: 7px;
+  padding: 6px 14px;
+  border-radius: 8px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   font-family: inherit;
-  font-size: 0.73rem;
+  font-size: 0.78rem;
   color: #64748B;
   white-space: nowrap;
   outline: none;
   transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-  min-height: 28px;
+  min-height: 32px;
 }
 
 .sim-segmented-tab:hover:not(.tab--active) {
@@ -800,7 +771,7 @@ body {
 
 .tab-step-status {
   font-weight: 500;
-  font-size: 0.7rem;
+  font-size: 0.74rem;
   opacity: 0.9;
 }
 
@@ -829,13 +800,13 @@ body {
 .sim-playback-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
 .sim-ctrl-btn {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   border: 1px solid #E2E8F0;
   background: #FFFFFF;
@@ -856,15 +827,15 @@ body {
   transform: scale(1.04);
 }
 
-/* ── C. One-Line Status Strip ── */
+/* ── B. One-Line Status Strip ── */
 .sim-status-strip {
-  padding: 5px 18px;
+  padding: 8px 24px;
   display: flex;
   align-items: center;
   gap: 8px;
   background: #FFFFFF;
   border-bottom: 1px solid #F1F5F9;
-  font-size: 0.75rem;
+  font-size: 0.78rem;
   transition: background 0.25s ease, border-color 0.25s ease;
 }
 
@@ -1324,32 +1295,20 @@ body {
 
 /* ── Mobile-First Responsive Adjustments ── */
 @media (max-width: 768px) {
-  .sim-header {
-    padding: 10px 14px 8px;
-  }
-
-  .sim-title {
-    font-size: 0.94rem;
-  }
-
-  .sim-subtitle {
-    font-size: 0.74rem;
-  }
-
   .sim-day-bar {
-    padding: 6px 12px;
+    padding: 10px 14px;
     gap: 8px;
   }
 
   .sim-segmented-tab {
-    padding: 4px 8px;
-    font-size: 0.68rem;
-    min-height: 26px;
+    padding: 5px 10px;
+    font-size: 0.72rem;
+    min-height: 28px;
     gap: 4px;
   }
 
   .sim-status-strip {
-    padding: 5px 12px;
+    padding: 6px 14px;
     font-size: 0.72rem;
   }
 
@@ -2049,26 +2008,22 @@ body {
 
 /* ── Section 6: Final Closing CTA ── */
 .final-cta-section {
-  background: #FFFFFF;
+  background: #F8FAFC;
   border-top: 1px solid #E2E8F0;
-  padding: 96px 0;
+  padding: 80px 0;
 }
 
 .final-cta-panel {
-  --final-cta-bg-image: none;
-  background-image: var(--final-cta-bg-image);
-  background: var(--final-cta-bg-image, linear-gradient(145deg, #0B2D5B 0%, #0F3A73 60%, #172554 100%));
-  background-size: cover;
-  background-position: center;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
   border-radius: 24px;
-  padding: 56px 48px;
+  padding: 56px 52px;
   display: grid;
   grid-template-columns: 1fr 1fr;
   align-items: center;
   gap: 48px;
-  box-shadow: 0 24px 56px -12px rgba(11, 45, 91, 0.25);
-  color: #FFFFFF;
+  box-shadow: 0 20px 48px -12px rgba(11, 45, 91, 0.08), 0 2px 8px rgba(15, 23, 42, 0.04);
+  color: #0B2D5B;
   position: relative;
   overflow: hidden;
 }
@@ -2086,21 +2041,21 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(37, 99, 235, 0.25);
-  border: 1px solid rgba(125, 211, 199, 0.35);
-  color: #7DD3C7;
-  font-size: 0.72rem;
+  background: #EFF6FF;
+  border: 1px solid #DBEAFE;
+  color: #2563EB;
+  font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.08em;
-  padding: 4px 12px;
+  padding: 5px 14px;
   border-radius: 9999px;
   text-transform: uppercase;
 }
 
 .final-cta-title {
   font-size: clamp(2rem, 3.2vw, 2.75rem);
-  font-weight: 700;
-  color: #FFFFFF;
+  font-weight: 800;
+  color: #0B2D5B;
   letter-spacing: -0.025em;
   margin: 0;
   line-height: 1.18;
@@ -2108,7 +2063,7 @@ body {
 
 .final-cta-desc {
   font-size: 1.05rem;
-  color: #CBD5E1;
+  color: #475569;
   line-height: 1.6;
   max-width: 480px;
   margin: 0;
@@ -2125,7 +2080,7 @@ body {
 .final-cta-primary-btn {
   background: #2563EB;
   color: #FFFFFF;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid #2563EB;
   padding: 13px 26px;
   font-size: 0.96rem;
   font-weight: 600;
@@ -2135,83 +2090,55 @@ body {
   gap: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
 }
 
 .final-cta-primary-btn:hover {
   background: #1D4ED8;
+  border-color: #1D4ED8;
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.5);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.45);
 }
 
 .final-cta-secondary-btn {
-  background: rgba(255, 255, 255, 0.08);
-  color: #F1F5F9;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: #F8FAFC;
+  color: #0B2D5B;
+  border: 1px solid #CBD5E1;
   padding: 12px 22px;
   font-size: 0.92rem;
-  font-weight: 500;
+  font-weight: 600;
   border-radius: 9999px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .final-cta-secondary-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
-  border-color: rgba(255, 255, 255, 0.35);
-  color: #FFFFFF;
+  background: #EFF6FF;
+  border-color: #93C5FD;
+  color: #2563EB;
 }
 
-/* Right Column: High-fidelity Product Preview */
+/* Right Column: Clean 3D Product Preview Image Only */
 .final-cta-right {
-  display: flex;
-  justify-content: center;
-  z-index: 1;
-}
-
-.preview-product-card {
-  background: #081B38;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 16px;
-  width: 100%;
-  max-width: 480px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
-  overflow: hidden;
-}
-
-.preview-product-card--3d {
-  background: #081B38;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 16px;
-  width: 100%;
-  max-width: 500px;
-  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.38);
-  overflow: hidden;
-}
-
-.preview-3d-mock-wrap {
-  background: linear-gradient(135deg, rgba(10, 34, 70, 0.7) 0%, rgba(15, 46, 92, 0.7) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  padding: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
+  width: 100%;
+  z-index: 1;
 }
 
-.preview-3d-img {
+.final-cta-preview-img {
   width: 100%;
+  max-width: 520px;
   height: auto;
-  max-height: 240px;
   object-fit: contain;
   display: block;
-  filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.3));
+  filter: drop-shadow(0 14px 28px rgba(15, 23, 42, 0.08));
   transition: transform 0.3s ease;
 }
 
-.preview-product-card--3d:hover .preview-3d-img {
-  transform: scale(1.02);
+.final-cta-preview-img:hover {
+  transform: translateY(-3px);
 }
 
 .preview-card-header {
@@ -4626,9 +4553,26 @@ body {
   background: none;
   border: none;
   cursor: pointer;
-  padding: 0;
+  padding: 4px 6px;
+  margin: -4px -6px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
+  transition: opacity 0.18s ease, transform 0.15s ease;
+  outline: none;
+}
+
+.brand-home-link:hover {
+  opacity: 0.86;
+  transform: translateY(-1px);
+}
+
+.brand-home-link:active {
+  transform: translateY(0);
+}
+
+.brand-home-link:focus-visible {
+  box-shadow: 0 0 0 2px #2563EB;
 }
 
 /* ── Unified Device Selector Pill (Desktop) ── */
@@ -7950,20 +7894,8 @@ body {
     border-radius: 14px;
   }
 
-  .sim-header {
-    padding: 8px 10px 6px;
-  }
-
-  .sim-title {
-    font-size: 0.88rem;
-  }
-
-  .sim-subtitle {
-    font-size: 0.68rem;
-  }
-
   .sim-day-bar {
-    padding: 5px 8px;
+    padding: 8px 10px;
     gap: 6px;
   }
 

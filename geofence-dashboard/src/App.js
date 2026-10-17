@@ -5,7 +5,7 @@ import {
   Radio, Clock,
   Check, Terminal, Sliders, Maximize2, Minimize2,
   Navigation, X, ChevronDown, Car, Smartphone,
-  Plus, Compass
+  Plus, Compass, Home
 } from 'lucide-react';
 import {
   Circle, MapContainer, Marker, Popup, TileLayer, useMap, Polyline, useMapEvents
@@ -255,7 +255,12 @@ function App() {
             setSession(null);
             setView('landing');
           }}
-          onGoToLanding={() => setView('landing')}
+          onGoToLanding={() => {
+            setView('landing');
+            if (typeof window !== 'undefined') {
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }}
         />
       )}
 
@@ -1028,11 +1033,16 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
             type="button"
             className="brand-home-link"
             onClick={() => {
-              setActiveTab('overview');
-              setShowSetupWizard(false);
-              setIsMapExpanded(false);
+              if (onGoToLanding) {
+                onGoToLanding();
+              } else {
+                setActiveTab('overview');
+                setShowSetupWizard(false);
+                setIsMapExpanded(false);
+              }
             }}
             title="CareTag Home"
+            aria-label="CareTag Home - Return to homepage"
           >
             <CareTagLogo variant="horizontal" size="sm" showTagline={false} />
           </button>
@@ -1139,6 +1149,21 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
                 >
                   <Sliders size={14} />
                   <span>Guided Device Setup</span>
+                </button>
+
+                <div className="account-menu-divider" />
+
+                <button
+                  type="button"
+                  className="account-menu-item"
+                  onClick={() => {
+                    setIsAccountMenuOpen(false);
+                    if (onGoToLanding) onGoToLanding();
+                  }}
+                  role="menuitem"
+                >
+                  <Home size={14} />
+                  <span>CareTag Homepage</span>
                 </button>
 
                 <div className="account-menu-divider" />
@@ -1835,6 +1860,23 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
                   <div className="more-action-text">
                     <strong>{tripMode.active ? 'End Trip Mode' : 'Start 1-Hour Trip Mode'}</strong>
                     <span>{tripMode.active ? `Active · auto-restores in ${tripMode.formattedRemaining}` : 'Pause deviation alerts while travelling together'}</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className="mobile-more-action-item"
+                  onClick={() => {
+                    setShowMoreMenu(false);
+                    if (onGoToLanding) onGoToLanding();
+                  }}
+                >
+                  <div className="more-action-icon-wrap">
+                    <Home size={18} className="text-blue" />
+                  </div>
+                  <div className="more-action-text">
+                    <strong>CareTag Homepage</strong>
+                    <span>Return to public homepage and product showcase</span>
                   </div>
                 </button>
 

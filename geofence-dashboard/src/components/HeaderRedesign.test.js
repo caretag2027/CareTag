@@ -278,4 +278,20 @@ describe('Header Redesign & Caregiver-Device Architecture Tests', () => {
     expect(screen.getByText(/No Smart Band devices linked to your account yet/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Link your first Smart Band/i })).toBeInTheDocument();
   });
+
+  // Logo home navigation
+  test('clicking the CareTag logo in the header returns to the homepage', async () => {
+    await renderDashboard();
+
+    const header = screen.getByRole('banner');
+    const logoBtn = within(header).getByTitle(/CareTag Home/i);
+    expect(logoBtn).toBeInTheDocument();
+
+    fireEvent.click(logoBtn);
+
+    // Should return to homepage (LandingPage)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Go to Dashboard/i })).toBeInTheDocument();
+    });
+  });
 });

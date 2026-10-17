@@ -315,15 +315,7 @@ export default function HeroRoutineSimulation() {
 
   return (
     <div ref={containerRef} className="sim-story-container">
-      {/* ── A. Compact Header ── */}
-      <div className="sim-header">
-        <div className="sim-header-text">
-          <h3 className="sim-title">CareTag Routine Learning</h3>
-          <p className="sim-subtitle">See how CareTag learns a student’s daily route.</p>
-        </div>
-      </div>
-
-      {/* ── B. Day Selector & Playback Controls (Clean Segmented Control) ── */}
+      {/* ── A. Day Selector & Playback Controls (Clean Segmented Control) ── */}
       <div className="sim-day-bar">
         <div className="sim-day-stepper" role="tablist" aria-label="Select demonstration day">
           {DAYS.map((day, idx) => {
@@ -358,7 +350,7 @@ export default function HeroRoutineSimulation() {
             aria-label={isPlaying ? 'Pause demonstration' : 'Play demonstration'}
             title={isPlaying ? 'Pause' : 'Play'}
           >
-            {isPlaying ? <Pause size={14} /> : <Play size={14} />}
+            {isPlaying ? <Pause size={15} /> : <Play size={15} />}
           </button>
           <button
             type="button"
@@ -367,7 +359,7 @@ export default function HeroRoutineSimulation() {
             aria-label="Replay demonstration from Day 1"
             title="Replay from Day 1"
           >
-            <RotateCcw size={14} />
+            <RotateCcw size={15} />
           </button>
         </div>
       </div>
