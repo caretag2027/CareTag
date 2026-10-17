@@ -18,17 +18,13 @@ import {
   Info,
   Zap,
   Clock,
-  Navigation,
   Sun,
   Footprints,
   X,
   Volume2,
-  VolumeX,
   Bell,
   Car,
-  ChevronRight,
-  Crosshair,
-  Smartphone
+  Crosshair
 } from 'lucide-react';
 import {
   formatLocationFreshness,
@@ -1054,7 +1050,7 @@ export default function CaregiverOverview({
             </div>
             <div>
               <strong>Safe Inside Boundary</strong>
-              <p>The child is comfortably within your pre-approved perimeter ({safety.insideZone || 'Campus Perimeter'}).</p>
+              <p>The child is securely staying inside your designated boundary ({safety.insideZone || 'Campus Perimeter'}).</p>
             </div>
           </div>
         </div>
@@ -1083,7 +1079,7 @@ export default function CaregiverOverview({
                 <span className="card-kicker-badge">Daily Movement History</span>
                 <span className="source-pill source-pill--live">
                   <Clock size={11} />
-                  <span>Today&apos;s Journey</span>
+                  <span>{hasTodayPoints ? "Today's Verified Track" : "Today's Journey"}</span>
                 </span>
               </div>
               <h4 className="caregiver-card-title">Where He Went Today &amp; First Location</h4>

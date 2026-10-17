@@ -508,7 +508,12 @@ export default function FirstTimeSetupWizard({
             <div className="wizard-summary-card">
               <div className="summary-card-header">
                 <ShieldCheck size={20} color="#0D9488" />
-                <strong>{savedZone?.label || label}</strong>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <strong>{savedZone?.label || label}</strong>
+                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
+                    {hardwareStatus?.deviceStatus === 'live' ? 'Setup Saved · Monitoring Ready' : 'Setup Saved · Awaiting Wearable Data'}
+                  </span>
+                </div>
               </div>
               <div className="summary-card-details">
                 <div className="summary-detail-row">
@@ -524,8 +529,18 @@ export default function FirstTimeSetupWizard({
                   </strong>
                 </div>
                 <div className="summary-detail-row">
-                  <span>Smart Band:</span>
-                  <span className="text-success font-bold">Connected & Verified</span>
+                  <span>Device Linked:</span>
+                  <span className="text-success font-bold">CARE-TAG-01 · ESP32 Verified</span>
+                </div>
+                <div className="summary-detail-row">
+                  <span>Live Telemetry:</span>
+                  <span className={hardwareStatus?.deviceStatus === 'live' ? 'text-success font-bold' : 'text-warning font-bold'}>
+                    {hardwareStatus?.deviceStatus === 'live' ? 'Streaming Live' : 'Awaiting Device Ping'}
+                  </span>
+                </div>
+                <div className="summary-detail-row">
+                  <span>Routine Learning:</span>
+                  <span className="text-teal font-bold">Adaptive · Awaiting Initial 3 Journeys</span>
                 </div>
               </div>
             </div>

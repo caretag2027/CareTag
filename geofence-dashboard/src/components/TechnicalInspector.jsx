@@ -308,17 +308,17 @@ export default function TechnicalInspector({
         <div className="tech-conn-grid">
           <div className="tech-conn-item">
             <div className="conn-status-indicator">
-              <span className="dot dot--green" />
+              <span className={`dot ${(hardwareStatus?.firebaseConnected !== false && diagResults?.results?.readTelemetry?.ok !== false) ? 'dot--green' : 'dot--red'}`} />
               <strong>Firebase Realtime DB</strong>
             </div>
             <span className="conn-meta">
-              Connected &bull; {diagResults?.results?.readTelemetry?.latencyMs || 38}ms Latency
+              {hardwareStatus?.firebaseConnected !== false ? `Connected · ${diagResults?.results?.readTelemetry?.latencyMs || 38}ms Latency` : 'Connection Failed'}
             </span>
           </div>
 
           <div className="tech-conn-item">
             <div className="conn-status-indicator">
-              <span className="dot dot--green" />
+              <span className={`dot ${diagResults?.results?.createSafeZone?.ok ? 'dot--green' : 'dot--blue'}`} />
               <strong>Write &amp; REST APIs</strong>
             </div>
             <span className="conn-meta">
@@ -328,20 +328,22 @@ export default function TechnicalInspector({
 
           <div className="tech-conn-item">
             <div className="conn-status-indicator">
-              <span className={`dot ${isRealHardware || simRunning ? 'dot--green' : 'dot--amber'}`} />
+              <span className={`dot ${simRunning ? 'dot--blue' : (!simRunning && hardwareStatus?.deviceStatus === 'live') ? 'dot--green' : (!simRunning && hardwareStatus?.deviceStatus === 'stale') ? 'dot--amber' : 'dot--neutral'}`} />
               <strong>Wearable Telemetry Feed</strong>
             </div>
             <span className="conn-meta">
-              {simRunning ? 'Simulation Stream (Active)' : isRealHardware ? 'ESP32 Ingestion Live' : 'Heartbeat Active'}
+              {simRunning ? 'Simulation Stream (Active)' : (!simRunning && hardwareStatus?.deviceStatus === 'live') ? 'ESP32 Ingestion Live' : (!simRunning && hardwareStatus?.deviceStatus === 'stale') ? `Delayed (${hardwareStatus?.formattedAge || 'Stale'})` : 'Offline / Awaiting Heartbeat'}
             </span>
           </div>
 
           <div className="tech-conn-item">
             <div className="conn-status-indicator">
-              <span className="dot dot--green" />
+              <span className={`dot ${geofences.length > 0 ? 'dot--green' : 'dot--neutral'}`} />
               <strong>CareTag Safety Engine</strong>
             </div>
-            <span className="conn-meta">Dynamic Hysteresis &bull; 45m Margin</span>
+            <span className="conn-meta">
+              {geofences.length > 0 ? `${geofences.length} Places · 45m Margin` : '0 Places Configured'}
+            </span>
           </div>
         </div>
       </div>
