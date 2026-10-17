@@ -52,7 +52,13 @@ export default function CookieBanner() {
     if (typeof window.gtag === 'function') {
       window.gtag('consent', 'update', {
         analytics_storage: 'granted',
+        ad_storage: 'granted',
       });
+    }
+
+    // Initialize Microsoft Clarity dynamically if defined
+    if (typeof window.initCareTagClarity === 'function') {
+      window.initCareTagClarity();
     }
   };
 
@@ -66,6 +72,7 @@ export default function CookieBanner() {
     if (typeof window.gtag === 'function') {
       window.gtag('consent', 'update', {
         analytics_storage: 'denied',
+        ad_storage: 'denied',
       });
     }
   };
@@ -77,7 +84,7 @@ export default function CookieBanner() {
 
   return (
     <>
-      {/* ── 1. Minimal Bottom Cookie Consent Banner ── */}
+      {/* ── 1. Compact Bottom Cookie Consent Banner ── */}
       {!hasConsent && (
         <div className="ct-cookie-banner-wrapper" role="region" aria-label="Cookie and Privacy Notice">
           <div className="ct-cookie-banner">
@@ -85,15 +92,15 @@ export default function CookieBanner() {
               type="button"
               className="ct-cookie-dismiss"
               onClick={handleEssentialOnly}
-              aria-label="Dismiss cookie notice"
+              aria-label="Dismiss cookie notice with essential cookies only"
               title="Dismiss"
             >
-              <X size={16} />
+              <X size={15} />
             </button>
             <div className="ct-cookie-content">
-              <ShieldCheck size={20} className="ct-cookie-icon" />
+              <ShieldCheck size={18} className="ct-cookie-icon" />
               <p className="ct-cookie-text">
-                <strong>We respect your privacy.</strong> CareTag uses essential session cookies and privacy-first analytics (Google Analytics &amp; Microsoft Clarity) to optimize caregiver safety workflows.{' '}
+                CareTag uses essential session cookies and privacy-first analytics to support routine-monitoring workflows.{' '}
                 <button
                   type="button"
                   className="ct-cookie-link"
@@ -115,7 +122,7 @@ export default function CookieBanner() {
                   className="ct-cookie-link"
                   onClick={() => openDocument('disclaimer')}
                 >
-                  Disclaimer
+                  Safety Disclaimer
                 </button>
                 .
               </p>
@@ -127,14 +134,14 @@ export default function CookieBanner() {
                 className="ct-cookie-btn ct-cookie-btn--secondary"
                 onClick={handleEssentialOnly}
               >
-                Essential Only
+                Essential only
               </button>
               <button
                 type="button"
                 className="ct-cookie-btn ct-cookie-btn--primary"
                 onClick={handleAcceptAll}
               >
-                Accept All
+                Accept all
               </button>
             </div>
           </div>

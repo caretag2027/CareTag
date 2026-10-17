@@ -85,7 +85,16 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const userName = session?.childName || session?.name || 'Bhavishya Singla';
-  const userInitial = (userName.trim().charAt(0) || 'B').toUpperCase();
+  const userInitial = (userName && userName.charAt(0).toUpperCase()) || 'B';
+  // On initial page load/refresh, reset window scroll to top
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if ('scrollRestoration' in window.history) {
+        window.history.scrollRestoration = 'manual';
+      }
+      window.scrollTo(0, 0);
+    }
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -120,7 +129,13 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
     setMobileMenuOpen(false);
     const element = document.getElementById(targetId);
     if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
+      const headerOffset = 76;
+      const elementPosition = element.getBoundingClientRect().top;
+      const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+      window.scrollTo({
+        top: Math.max(0, offsetPosition),
+        behavior: 'smooth'
+      });
     }
   }, []);
 
@@ -143,9 +158,36 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
 
           {/* Navigation links in the middle (Desktop & Tablet) */}
           <nav className="floating-nav" aria-label="Main Navigation">
-            <a href="#how-it-works" className="floating-nav-link" onClick={() => handleNavClick('how-it-works')}>How it works</a>
-            <a href="#preview" className="floating-nav-link" onClick={() => handleNavClick('preview')}>Features</a>
-            <a href="#team" className="floating-nav-link" onClick={() => handleNavClick('team')}>Built by</a>
+            <a
+              href="#how-it-works"
+              className="floating-nav-link"
+              onClick={(e) => {
+                e.preventDefault();
+                handleNavClick('how-it-works');
+              }}
+            >
+              How it works
+            </a>
+            <a
+              href="#features"
+              className="floating-nav-link"
+              onClick={(e) => {
+                e.preventDefault();
+                handleNavClick('features');
+              }}
+            >
+              Features
+            </a>
+            <a
+              href="#team"
+              className="floating-nav-link"
+              onClick={(e) => {
+                e.preventDefault();
+                handleNavClick('team');
+              }}
+            >
+              Built by
+            </a>
           </nav>
 
           {/* Actions on the right */}
@@ -209,15 +251,15 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
                 <span>How it works</span>
               </a>
               <a
-                href="#preview"
+                href="#features"
                 className="mobile-menu-link"
                 onClick={(e) => {
                   e.preventDefault();
-                  handleNavClick('preview');
+                  handleNavClick('features');
                 }}
               >
                 <Activity size={17} className="text-teal" />
-                <span>Features &amp; Routine Model</span>
+                <span>Features</span>
               </a>
               <a
                 href="#team"
@@ -228,7 +270,7 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
                 }}
               >
                 <Shield size={17} className="text-blue" />
-                <span>Built by (Capstone Team)</span>
+                <span>Built by</span>
               </a>
             </nav>
 
@@ -294,14 +336,14 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
       {/* ── 2. Modern Airy Hero Section ── */}
       <section className="hero-section">
         <div className="hero-container">
-          {/* Main Hero Headline (Single line on desktop) */}
+          {/* Main Hero Headline */}
           <h1 className="hero-title">
             Safety that understands <span className="hero-title-highlight">routines.</span>
           </h1>
 
           {/* Concise Subhead */}
           <p className="hero-subtitle">
-            Location boundaries and routine-learning intelligence to help caregivers notice unexpected movement before it becomes an emergency.
+            Routine-aware location monitoring that helps caregivers notice unexpected movement.
           </p>
 
           {/* Centered CTA Row */}
@@ -315,27 +357,40 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
               <ArrowRight size={16} />
             </button>
 
-            <a href="#how-it-works" className="btn-hero-secondary">
+            <button
+              type="button"
+              className="btn-hero-secondary"
+              onClick={() => handleNavClick('routine-demo')}
+            >
               <span>See how it works &darr;</span>
-            </a>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* ── 3. Visual 4-Day Routine Awareness Demonstration (Home ↔ School) ── */}
+      <section id="routine-demo" className="routine-demo-section">
+        <div className="section-container">
+          <div className="section-header text-center">
+            <div className="section-eyebrow-pill">
+              <Activity size={13} />
+              <span>INTERACTIVE DEMO</span>
+            </div>
+            <h2 className="section-title">See how a routine becomes familiar.</h2>
+            <p className="section-lead">
+              Explore how CareTag compares a usual route with an unexpected change.
+            </p>
           </div>
 
-          {/* ── 3. Visual 4-Day Routine Awareness Demonstration (Home ↔ School) ── */}
-          <div className="hero-product-showcase" id="preview">
-            <div className="showcase-browser-frame">
-              {/* Browser chrome header for polish */}
-              <div className="showcase-browser-bar">
-                <div className="showcase-browser-controls">
-                  <span className="browser-circle dot-red" />
-                  <span className="browser-circle dot-yellow" />
-                  <span className="browser-circle dot-green" />
-                </div>
-                <div className="showcase-browser-address">
-                  caretag.app/routine-learning-demo
-                </div>
-                <div className="showcase-browser-status">
+          <div className="showcase-demo-wrapper">
+            <div className="showcase-demo-frame">
+              <div className="showcase-demo-header-bar">
+                <div className="showcase-demo-tag">
                   <span className="showcase-pulse-dot" />
-                  <span>Interactive 4-Day Model</span>
+                  <span>Routine-Learning Model &bull; Interactive 4-Day Simulation</span>
+                </div>
+                <div className="showcase-demo-badge">
+                  <span>Interactive Prototype</span>
                 </div>
               </div>
 
@@ -371,7 +426,7 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
               </div>
               <h3 className="step-card-title">Learn movement patterns</h3>
               <p className="step-card-desc">
-                CareTag analyzes historical GPS trajectories to model recurring places, transit corridors, and regular commute hours.
+                CareTag uses location history to learn familiar places and usual routes.
               </p>
             </div>
 
@@ -383,9 +438,9 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
                 </div>
                 <span className="step-number-indicator">02</span>
               </div>
-              <h3 className="step-card-title">Check location &amp; routine</h3>
+              <h3 className="step-card-title">Check location and routine</h3>
               <p className="step-card-desc">
-                Continuously evaluates safe-place boundaries and routine deviation independently to flag deviations early.
+                It checks safe-zone boundaries and routine deviations independently.
               </p>
             </div>
 
@@ -397,9 +452,9 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
                 </div>
                 <span className="step-number-indicator">03</span>
               </div>
-              <h3 className="step-card-title">Review useful context</h3>
+              <h3 className="step-card-title">Show useful context</h3>
               <p className="step-card-desc">
-                Surfaces the anomaly confidence score and location context so caregivers can make informed decisions quickly.
+                Caregivers see the deviation score and location details behind an alert.
               </p>
             </div>
           </div>
@@ -407,7 +462,7 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
       </section>
 
       {/* ── 5. What Makes CareTag Different ── */}
-      <section id="difference" className="different-section">
+      <section id="features" className="different-section">
         <div className="section-container">
           <div className="section-header text-center">
             <div className="section-eyebrow-pill">
@@ -416,7 +471,7 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
             </div>
             <h2 className="section-title">Location is only half the picture.</h2>
             <p className="section-lead">
-              Standard trackers only display a dot on a map. CareTag understands whether the movement fits habitual daily life.
+              CareTag checks location boundaries and learned routines to give caregivers more context.
             </p>
           </div>
 
@@ -427,7 +482,7 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
               </div>
               <h3 className="different-card-title">Routine-aware</h3>
               <p className="different-card-desc">
-                Considers when and where a person normally moves, distinguishing habitual daily trips from unexpected departures.
+                Considers when and where a person usually moves, not just their current position.
               </p>
             </div>
 
@@ -437,7 +492,7 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
               </div>
               <h3 className="different-card-title">Two independent checks</h3>
               <p className="different-card-desc">
-                Safe-zone breaches and behavioral deviations can each raise an alert, catching unusual wandering even within a wide boundary.
+                Safe-zone breaches and unusual movement can each trigger an alert.
               </p>
             </div>
 
@@ -447,9 +502,13 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
               </div>
               <h3 className="different-card-title">Contextual, calm alerts</h3>
               <p className="different-card-desc">
-                Surfaces the deviation score and location details to support caregiver review, providing clear context rather than alarmist panic.
+                A deviation score and location details help caregivers review what changed.
               </p>
             </div>
+          </div>
+
+          <div className="different-footnote">
+            <p>Note: A deviation score signals an unexpected departure from a habitual daily routine and is not proof of danger.</p>
           </div>
         </div>
       </section>
@@ -468,11 +527,11 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
             <div className="taggy-strip-main">
               <div className="taggy-pill-label">
                 <Sparkles size={13} />
-                <span>SAFETY COMPANION</span>
+                <span>YOUR CARETAG COMPANION</span>
               </div>
-              <h3 className="taggy-strip-title">Meet Taggy, your CareTag companion.</h3>
+              <h3 className="taggy-strip-title">Meet Taggy.</h3>
               <p className="taggy-strip-desc">
-                Friendly guidance for safe-place setup, wearable telemetry status, and contextual safety notifications.
+                Get help understanding safe places, routine learning, and CareTag alerts.
               </p>
             </div>
             <div className="taggy-strip-action">
@@ -480,10 +539,10 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
                 type="button"
                 className="taggy-strip-btn"
                 onClick={() => window.dispatchEvent(new CustomEvent('caretag:open-taggy'))}
-                title="Chat with Taggy"
+                title="Ask Taggy a question"
               >
                 <Sparkles size={14} />
-                <span>Ask Taggy a Question</span>
+                <span>Ask Taggy a question</span>
                 <ArrowRight size={14} />
               </button>
             </div>
@@ -498,7 +557,7 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
             <div className="section-eyebrow-pill">
               <span>BATCH OF 2027</span>
             </div>
-            <h2 className="section-title">The team behind CareTag</h2>
+            <h2 className="section-title">Built by the CareTag team</h2>
             <p className="section-lead team-subtitle">
               Thapar Institute of Engineering &amp; Technology &bull; Computer Engineering Capstone Project
             </p>
@@ -552,22 +611,77 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
       {/* ── 8. Final Closing CTA ── */}
       <section className="final-cta-section">
         <div className="section-container">
-          <div className="final-cta-card">
-            <div className="section-eyebrow-pill">
-              <span>READY TO BEGIN</span>
+          <div className="final-cta-panel">
+            <div className="final-cta-left">
+              <div className="final-cta-eyebrow">
+                <Sparkles size={13} />
+                <span>READY TO EXPLORE</span>
+              </div>
+              <h2 className="final-cta-title">See CareTag in action.</h2>
+              <p className="final-cta-desc">
+                Explore safe zones, routine-aware monitoring, and contextual alerts in the dashboard.
+              </p>
+              <div className="final-cta-btn-group">
+                <button
+                  type="button"
+                  className="btn-hero-primary final-cta-primary-btn"
+                  onClick={onLaunchDashboard}
+                >
+                  <span>Open dashboard</span>
+                  <ArrowRight size={16} />
+                </button>
+                <button
+                  type="button"
+                  className="final-cta-secondary-btn"
+                  onClick={() => handleNavClick('routine-demo')}
+                >
+                  <span>Try the interactive demo</span>
+                </button>
+              </div>
             </div>
-            <h2 className="final-cta-title">Explore the CareTag dashboard.</h2>
-            <p className="final-cta-desc">
-              Configure safe places and explore routine-aware location monitoring in real time.
-            </p>
-            <button
-              type="button"
-              className="btn-hero-primary final-cta-btn"
-              onClick={onLaunchDashboard}
-            >
-              <span>Open dashboard</span>
-              <ArrowRight size={16} />
-            </button>
+
+            <div className="final-cta-right" aria-hidden="true">
+              <div className="preview-product-card">
+                <div className="preview-card-header">
+                  <div className="preview-card-dots">
+                    <span className="dot dot-red" />
+                    <span className="dot dot-yellow" />
+                    <span className="dot dot-green" />
+                  </div>
+                  <span className="preview-card-title">CareTag Dashboard &bull; Live Preview</span>
+                  <span className="preview-status-pill">Interactive Demo</span>
+                </div>
+                <div className="preview-card-body">
+                  <div className="preview-map-mock">
+                    <div className="preview-zone zone-home">
+                      <span className="preview-zone-dot" />
+                      <span>Home</span>
+                    </div>
+                    <div className="preview-corridor" />
+                    <div className="preview-zone zone-school">
+                      <span className="preview-zone-dot" />
+                      <span>School</span>
+                    </div>
+                    <div className="preview-device-pin">
+                      <span className="pin-pulse" />
+                      <span className="pin-core" />
+                    </div>
+                  </div>
+                  <div className="preview-telemetry-row">
+                    <div className="preview-chip">
+                      <span className="chip-dot dot-green" />
+                      <span>ESP32 Band: Connected</span>
+                    </div>
+                    <div className="preview-chip">
+                      <span>Battery: 92%</span>
+                    </div>
+                    <div className="preview-chip chip-highlight">
+                      <span>Deviation score: 0.12 (Nominal)</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -588,9 +702,36 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
             </div>
 
             <nav className="footer-nav" aria-label="Footer Navigation">
-              <a href="#how-it-works" className="footer-nav-link">How it works</a>
-              <a href="#preview" className="footer-nav-link">Features</a>
-              <a href="#team" className="footer-nav-link">Built by</a>
+              <a
+                href="#how-it-works"
+                className="footer-nav-link"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleNavClick('how-it-works');
+                }}
+              >
+                How it works
+              </a>
+              <a
+                href="#features"
+                className="footer-nav-link"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleNavClick('features');
+                }}
+              >
+                Features
+              </a>
+              <a
+                href="#team"
+                className="footer-nav-link"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleNavClick('team');
+                }}
+              >
+                Built by
+              </a>
               <button type="button" className="footer-nav-btn" onClick={onLaunchDashboard}>
                 Open dashboard
               </button>

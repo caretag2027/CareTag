@@ -81,10 +81,22 @@ const DAYS = [
 
 export default function HeroRoutineSimulation() {
   const [dayIndex, setDayIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false); // Starts false until meaningfully in view
   const [studentCoords, setStudentCoords] = useState(MAIN_ROUTE.p0);
   const [isReturning, setIsReturning] = useState(false);
   const [hasDeviated, setHasDeviated] = useState(false);
+
+  const containerRef = useRef(null);
+  const userPausedRef = useRef(false);
+  const isInViewRef = useRef(false);
+
+  // Check prefers-reduced-motion
+  const [reducedMotion, setReducedMotion] = useState(() => {
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+    return false;
+  });
 
   // Animation state in a ref to avoid stale closures and frame drops
   const animRef = useRef({
@@ -92,13 +104,57 @@ export default function HeroRoutineSimulation() {
     phase: 'outbound', // 'outbound' | 'pause_dest' | 'inbound' | 'pause_home' | 'deviating' | 'alert_hold'
     phaseTimer: 0,
     lastTime: null,
-    isPlaying: true
+    isPlaying: false
   });
 
   // Keep animRef playing state in sync
   useEffect(() => {
     animRef.current.isPlaying = isPlaying;
   }, [isPlaying]);
+
+  // Listen for reduced motion preference changes
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const handler = (e) => {
+      setReducedMotion(e.matches);
+      if (e.matches) {
+        setIsPlaying(false);
+        userPausedRef.current = true;
+      }
+    };
+    mq.addEventListener?.('change', handler);
+    return () => mq.removeEventListener?.('change', handler);
+  }, []);
+
+  // IntersectionObserver: Only run animation when demo is meaningfully in view, pause when off-screen
+  useEffect(() => {
+    if (!containerRef.current || typeof IntersectionObserver === 'undefined') {
+      setIsPlaying(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const inView = entry.isIntersecting && entry.intersectionRatio >= 0.25;
+        isInViewRef.current = inView;
+
+        if (inView) {
+          // If in view, resume playback unless user explicitly paused or reduced motion is active
+          if (!userPausedRef.current && !reducedMotion) {
+            setIsPlaying(true);
+          }
+        } else {
+          // Off-screen: pause animation to save battery and GPU cycles
+          setIsPlaying(false);
+        }
+      },
+      { threshold: [0, 0.25, 0.5] }
+    );
+
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [reducedMotion]);
 
   // Main 60fps Animation Loop
   useEffect(() => {
@@ -230,7 +286,11 @@ export default function HeroRoutineSimulation() {
 
   // Play / Pause toggle
   const handleTogglePlay = useCallback(() => {
-    setIsPlaying(prev => !prev);
+    setIsPlaying(prev => {
+      const next = !prev;
+      userPausedRef.current = !next;
+      return next;
+    });
   }, []);
 
   // Reset to Day 1
@@ -240,19 +300,21 @@ export default function HeroRoutineSimulation() {
     state.phase = 'outbound';
     state.phaseTimer = 0;
     state.lastTime = null;
-    state.isPlaying = true;
-    setIsPlaying(true);
+    userPausedRef.current = false;
+    const shouldPlay = !reducedMotion;
+    state.isPlaying = shouldPlay;
+    setIsPlaying(shouldPlay);
     setDayIndex(0);
     setIsReturning(false);
     setHasDeviated(false);
     setStudentCoords(MAIN_ROUTE.p0);
-  }, []);
+  }, [reducedMotion]);
 
   const currentDay = DAYS[dayIndex];
   const isDeviationDay = currentDay.type === 'deviation';
 
   return (
-    <div className="sim-story-container">
+    <div ref={containerRef} className="sim-story-container">
       {/* ── A. Compact Header ── */}
       <div className="sim-header">
         <div className="sim-header-text">
@@ -640,7 +702,7 @@ export default function HeroRoutineSimulation() {
               </span>
               <span className="alert-meta-dot">•</span>
               <span className="alert-meta-item">
-                Confidence: <strong className="meta-confidence">99.4%</strong>
+                Deviation score: <strong className="meta-confidence">0.94 (High)</strong>
               </span>
             </div>
           </div>

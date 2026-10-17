@@ -49,14 +49,41 @@ describe('TaggyChatbot Component', () => {
     expect(screen.queryByText(/ESP32/i)).not.toBeInTheDocument();
   });
 
-  test('renders the 4 caregiver starter questions', () => {
+  test('initial open behavior: welcome message starts at top, questions are collapsed by default with aria-expanded false', () => {
     render(<TaggyChatbot />);
     fireEvent.click(screen.getByRole('button', { name: /open taggy ai chatbot/i }));
 
+    // Welcome message should be rendered at the top
+    expect(screen.getByText(/Hi, I'm/i)).toBeInTheDocument();
+
+    // Toggle button should be present, collapsed by default with aria-expanded=false
+    const toggleBtn = screen.getByRole('button', { name: /show suggested questions/i });
+    expect(toggleBtn).toBeInTheDocument();
+    expect(toggleBtn).toHaveAttribute('aria-expanded', 'false');
+
+    // Questions should not be in document while collapsed
+    expect(screen.queryByRole('button', { name: 'How do I set up a safe place?' })).not.toBeInTheDocument();
+  });
+
+  test('toggling suggestions control expands and collapses questions accessibly', () => {
+    render(<TaggyChatbot />);
+    fireEvent.click(screen.getByRole('button', { name: /open taggy ai chatbot/i }));
+
+    const toggleBtn = screen.getByRole('button', { name: /show suggested questions/i });
+    expect(toggleBtn).toHaveAttribute('aria-expanded', 'false');
+
+    // Click to expand
+    fireEvent.click(toggleBtn);
+    expect(toggleBtn).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByRole('button', { name: 'How do I set up a safe place?' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'What happens if my child leaves a safe place?' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: "Why haven't I received an alert?" })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'What should I do if the band goes offline?' })).toBeInTheDocument();
+
+    // Click to collapse again
+    fireEvent.click(toggleBtn);
+    expect(toggleBtn).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: 'How do I set up a safe place?' })).not.toBeInTheDocument();
   });
 
   test('clicking a question chip triggers direct caregiver response', async () => {
@@ -68,6 +95,10 @@ describe('TaggyChatbot Component', () => {
       />
     );
     fireEvent.click(screen.getByRole('button', { name: /open taggy ai chatbot/i }));
+
+    // Open questions
+    const toggleBtn = screen.getByRole('button', { name: /show suggested questions/i });
+    fireEvent.click(toggleBtn);
 
     const safePlaceChip = screen.getByRole('button', { name: 'How do I set up a safe place?' });
     fireEvent.click(safePlaceChip);
@@ -129,6 +160,10 @@ describe('TaggyChatbot Component', () => {
     render(<TaggyChatbot />);
     fireEvent.click(screen.getByRole('button', { name: /open taggy ai chatbot/i }));
 
+    // Open questions
+    const toggleBtn = screen.getByRole('button', { name: /show suggested questions/i });
+    fireEvent.click(toggleBtn);
+
     // Send a message
     const chip = screen.getByRole('button', { name: 'What should I do if the band goes offline?' });
     fireEvent.click(chip);
@@ -164,6 +199,11 @@ describe('TaggyChatbot Component', () => {
     // Verify landing page marketing welcome text
     expect(screen.getByText(/Welcome to CareTag/i)).toBeInTheDocument();
     expect(screen.getByText(/routine-learning AI, battery life, and how CareTag keeps kids safe without false alarms/i)).toBeInTheDocument();
+
+    // Toggle suggestions open
+    const toggleBtn = screen.getByRole('button', { name: /show suggested questions/i });
+    expect(toggleBtn).toBeInTheDocument();
+    fireEvent.click(toggleBtn);
 
     // Verify popular product questions
     expect(screen.getByRole('button', { name: 'What makes CareTag different from regular GPS trackers?' })).toBeInTheDocument();

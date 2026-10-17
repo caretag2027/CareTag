@@ -5,7 +5,7 @@ import {
   Radio, Clock,
   Check, Terminal, Sliders, Maximize2, Minimize2,
   Navigation, X, ChevronDown, Car, Smartphone,
-  Plus
+  Plus, Compass
 } from 'lucide-react';
 import {
   Circle, MapContainer, Marker, Popup, TileLayer, useMap, Polyline, useMapEvents
@@ -273,13 +273,46 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
   // ── Multi-Device & Profile Management ──
   const [devicesList, setDevicesList] = useState(() => deviceStore.loadUserDevices(userId));
   const [selectedDeviceKey, setSelectedDeviceKey] = useState(() => deviceStore.getActiveDeviceKey(userId, session.deviceKey || 'CARE-TAG-01'));
+  const [isPersonMenuOpen, setIsPersonMenuOpen] = useState(false);
   const [isDeviceMenuOpen, setIsDeviceMenuOpen] = useState(false);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const personMenuRef = useRef(null);
+  const deviceMenuRef = useRef(null);
+  const accountMenuRef = useRef(null);
   const [showLinkDeviceModal, setShowLinkDeviceModal] = useState(false);
   const [newDeviceKeyInput, setNewDeviceKeyInput] = useState('');
   const [newChildNameInput, setNewChildNameInput] = useState('');
   const [newAgeInput, setNewAgeInput] = useState('8');
   const [newRelationInput, setNewRelationInput] = useState('Child');
   const [linkError, setLinkError] = useState('');
+
+  // Close menus on outside click or Escape key
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (personMenuRef.current && !personMenuRef.current.contains(e.target)) {
+        setIsPersonMenuOpen(false);
+      }
+      if (deviceMenuRef.current && !deviceMenuRef.current.contains(e.target)) {
+        setIsDeviceMenuOpen(false);
+      }
+      if (accountMenuRef.current && !accountMenuRef.current.contains(e.target)) {
+        setIsAccountMenuOpen(false);
+      }
+    }
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') {
+        setIsPersonMenuOpen(false);
+        setIsDeviceMenuOpen(false);
+        setIsAccountMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   // Active Profile metadata derived from selected wearable device
   const activeProfile = devicesList.find(d => d.deviceKey === selectedDeviceKey) || devicesList[0] || {
@@ -292,6 +325,35 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
   const monitoredName = activeProfile.childName;
   const monitoredInitial = (monitoredName.trim().charAt(0) || 'C').toUpperCase();
   const deviceDisplayName = `${monitoredName.split(' ')[0]}'s Smart Band (${selectedDeviceKey})`;
+
+  // Distinct monitored people (Caregiver -> Monitored Person -> Linked Devices hierarchy)
+  const distinctPersons = React.useMemo(() => {
+    const seen = new Set();
+    const list = [];
+    for (const dev of devicesList) {
+      const key = (dev.childName || '').trim().toLowerCase();
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        list.push(dev);
+      }
+    }
+    return list;
+  }, [devicesList]);
+
+  // Devices specifically linked to the currently selected person
+  const linkedDevicesForPerson = React.useMemo(() => {
+    const currentName = (monitoredName || '').trim().toLowerCase();
+    return devicesList.filter(d => (d.childName || '').trim().toLowerCase() === currentName);
+  }, [devicesList, monitoredName]);
+
+  // Caregiver display identity
+  const caregiverName = session?.name || session?.email?.split('@')[0] || 'Caregiver';
+  const caregiverInitial = (caregiverName.trim().charAt(0) || 'C').toUpperCase();
+  const caregiverRoleLabel = session?.role === 'admin'
+    ? 'Administrator'
+    : session?.role === 'guardian'
+    ? 'Family Guardian'
+    : 'Caregiver';
 
   // ── Trip Mode & Alert Preferences State ──
   const [tripMode, setTripModeState] = useState(() => alertStore.getTripMode(userId, selectedDeviceKey));
@@ -351,9 +413,10 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
   const [routineProfile, setRoutineProfile] = useState(null);
 
   // ── Navigation & UI State ──
-  // Tabs: 'overview' | 'safezones' | 'alerts' | 'inspector'
+  // Tabs: 'overview' | 'map' | 'safezones' | 'alerts' | 'inspector'
   const [activeTab, setActiveTab] = useState(initialTab);
   const [showSetupWizard, setShowSetupWizard] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [showExpectedRoute, setShowExpectedRoute] = useState(true);
   const [flyToTarget, setFlyToTarget] = useState(null);
@@ -487,8 +550,19 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
     setSelectedDeviceKey(newKey);
     deviceStore.setActiveDeviceKey(userId, newKey);
     setIsDeviceMenuOpen(false);
+    setIsPersonMenuOpen(false);
     pushToast(`Switched active profile to ${newKey}`, 'info');
   }, [selectedDeviceKey, userId, pushToast]);
+
+  // ── Switch Monitored Person Handler ──
+  const handleSelectPerson = useCallback((person) => {
+    const targetDevice = devicesList.find(d => (d.childName || '').trim().toLowerCase() === (person.childName || '').trim().toLowerCase());
+    if (targetDevice) {
+      handleSwitchDevice(targetDevice.deviceKey);
+      pushToast(`Monitoring ${person.childName}`, 'info');
+    }
+    setIsPersonMenuOpen(false);
+  }, [devicesList, handleSwitchDevice, pushToast]);
 
   // ── Link New Device Handler ──
   const handleLinkDeviceSubmit = (e) => {
@@ -807,70 +881,175 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
             <CareTagLogo variant="horizontal" size="sm" showTagline={false} />
           </button>
 
-          {/* Child Active Profile & Multi-Device Selector */}
-          <div className="child-profile-selector-wrap" style={{ position: 'relative' }}>
-            <button
-              type="button"
-              className="child-profile-pill child-profile-pill--selectable"
-              onClick={() => setIsDeviceMenuOpen(o => !o)}
-              title="Click to switch monitored child or device"
-              aria-haspopup="true"
-              aria-expanded={isDeviceMenuOpen}
-            >
-              <div className="child-avatar" style={{ backgroundColor: activeProfile.avatarColor || '#2563EB' }}>
-                <span>{monitoredInitial}</span>
-              </div>
-              <div className="child-meta">
-                <span className="child-name">{monitoredName}</span>
-                <span className="child-device-tag">
-                  {isLiveHardwareMode ? activeProfile.deviceKey : `Sim: ${activeScenario || 'Active'}`}
-                </span>
-              </div>
-              <ChevronDown size={14} className="device-dropdown-chevron" />
-            </button>
+          {/* Identity & Monitoring Context Bar: Monitored Person + Linked Devices */}
+          <div className="header-identity-nav" aria-label="Monitoring Context">
+            {/* Context Item 1: Monitored Person Selector */}
+            <div className="context-selector-wrap" ref={personMenuRef}>
+              <span className="context-kicker">MONITORING</span>
+              <button
+                type="button"
+                className={`context-pill context-pill--person ${isPersonMenuOpen ? 'is-open' : ''}`}
+                onClick={() => {
+                  setIsPersonMenuOpen(o => !o);
+                  setIsDeviceMenuOpen(false);
+                  setIsAccountMenuOpen(false);
+                }}
+                title="Switch monitored person"
+                aria-haspopup="true"
+                aria-expanded={isPersonMenuOpen}
+              >
+                <div className="context-avatar" style={{ backgroundColor: activeProfile.avatarColor || '#2563EB' }}>
+                  <span>{monitoredInitial}</span>
+                </div>
+                <span className="context-name">{monitoredName}</span>
+                <ChevronDown size={13} className="context-chevron" />
+              </button>
 
-            {isDeviceMenuOpen && (
-              <div className="device-select-dropdown" role="menu">
-                <div className="dropdown-header-label">Switch Monitored Wearable</div>
-                <div className="device-select-list">
-                  {devicesList.map(dev => {
-                    const isSelected = dev.deviceKey === selectedDeviceKey;
-                    const initial = (dev.childName?.trim().charAt(0) || 'C').toUpperCase();
-                    return (
-                      <button
-                        key={dev.id || dev.deviceKey}
-                        type="button"
-                        className={`device-select-item ${isSelected ? 'is-selected' : ''}`}
-                        onClick={() => handleSwitchDevice(dev.deviceKey)}
-                        role="menuitem"
-                      >
-                        <div className="child-avatar child-avatar--sm" style={{ backgroundColor: dev.avatarColor || '#2563EB' }}>
-                          <span>{initial}</span>
-                        </div>
-                        <div className="device-select-info">
-                          <strong className="dev-name">{dev.childName}</strong>
-                          <span className="dev-key">{dev.deviceKey} &bull; {dev.relation || 'Child'}</span>
-                        </div>
-                        {isSelected && <Check size={14} className="text-teal" />}
-                      </button>
-                    );
-                  })}
+              {isPersonMenuOpen && (
+                <div className="context-dropdown context-dropdown--person" role="menu">
+                  <div className="context-dropdown-header">
+                    <span className="context-dropdown-title">Monitored Person</span>
+                    <span className="context-dropdown-sub">Select who you want to view on the dashboard</span>
+                  </div>
+                  <div className="context-dropdown-list">
+                    {distinctPersons.map(person => {
+                      const isSelected = person.childName.trim().toLowerCase() === monitoredName.trim().toLowerCase();
+                      const initial = (person.childName?.trim().charAt(0) || 'C').toUpperCase();
+                      const countLinked = devicesList.filter(d => d.childName.trim().toLowerCase() === person.childName.trim().toLowerCase()).length;
+                      return (
+                        <button
+                          key={person.childName}
+                          type="button"
+                          className={`context-dropdown-item ${isSelected ? 'is-selected' : ''}`}
+                          onClick={() => handleSelectPerson(person)}
+                          role="menuitem"
+                        >
+                          <div className="context-avatar context-avatar--sm" style={{ backgroundColor: person.avatarColor || '#2563EB' }}>
+                            <span>{initial}</span>
+                          </div>
+                          <div className="context-item-info">
+                            <strong className="item-title">{person.childName}</strong>
+                            <span className="item-meta">
+                              {person.relation || 'Child'} {person.age ? `· Age ${person.age}` : ''} · {countLinked} {countLinked === 1 ? 'device' : 'devices'}
+                            </span>
+                          </div>
+                          {isSelected && <Check size={14} className="text-teal item-check" />}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="device-dropdown-footer">
-                  <button
-                    type="button"
-                    className="btn-link-new-device"
-                    onClick={() => {
-                      setIsDeviceMenuOpen(false);
-                      setShowLinkDeviceModal(true);
-                    }}
-                  >
-                    <Plus size={13} />
-                    <span>Link Another Smart Band</span>
-                  </button>
+              )}
+            </div>
+
+            <span className="context-separator" aria-hidden="true">&bull;</span>
+
+            {/* Context Item 2: Devices Linked to Monitored Person */}
+            <div className="context-selector-wrap" ref={deviceMenuRef}>
+              <span className="context-kicker">DEVICE</span>
+              <button
+                type="button"
+                className={`context-pill context-pill--device ${isDeviceMenuOpen ? 'is-open' : ''}`}
+                onClick={() => {
+                  setIsDeviceMenuOpen(o => !o);
+                  setIsPersonMenuOpen(false);
+                  setIsAccountMenuOpen(false);
+                }}
+                title={`Devices linked to ${monitoredName}`}
+                aria-haspopup="true"
+                aria-expanded={isDeviceMenuOpen}
+              >
+                <Radio size={12} className="context-device-icon" />
+                <span className="context-device-key">{selectedDeviceKey}</span>
+                <span className={`status-dot status-dot--sm ${
+                  simRunning
+                    ? 'status-dot--green'
+                    : hardwareStatus.deviceStatus === DEVICE_STATUS.LIVE
+                    ? 'status-dot--green'
+                    : hardwareStatus.deviceStatus === DEVICE_STATUS.STALE
+                    ? 'status-dot--yellow'
+                    : 'status-dot--neutral'
+                }`} />
+                <ChevronDown size={13} className="context-chevron" />
+              </button>
+
+              {isDeviceMenuOpen && (
+                <div className="context-dropdown context-dropdown--device" role="menu">
+                  <div className="context-dropdown-header">
+                    <span className="context-dropdown-title">Devices for {monitoredName}</span>
+                    <span className="context-dropdown-sub">Wearables paired with this profile</span>
+                  </div>
+                  <div className="context-dropdown-list">
+                    {linkedDevicesForPerson.length === 0 ? (
+                      <div className="context-dropdown-empty">
+                        <span>No devices linked to {monitoredName} yet.</span>
+                      </div>
+                    ) : (
+                      linkedDevicesForPerson.map(dev => {
+                        const isSelected = dev.deviceKey === selectedDeviceKey;
+                        const isOnline = isSelected && (simRunning || hardwareStatus.deviceStatus === DEVICE_STATUS.LIVE);
+                        const isAwaiting = isSelected && (hardwareStatus.deviceStatus === DEVICE_STATUS.WAITING_FOR_DATA || hardwareStatus.deviceStatus === DEVICE_STATUS.CONNECTING);
+                        const isStale = isSelected && hardwareStatus.deviceStatus === DEVICE_STATUS.STALE;
+                        const statusLabel = isSelected
+                          ? (simRunning
+                              ? 'Simulation Stream'
+                              : isOnline
+                              ? 'Online'
+                              : isAwaiting
+                              ? 'Awaiting first heartbeat'
+                              : isStale
+                              ? 'Delayed'
+                              : 'Offline')
+                          : 'Linked (Standby)';
+
+                        return (
+                          <button
+                            key={dev.id || dev.deviceKey}
+                            type="button"
+                            className={`context-dropdown-item ${isSelected ? 'is-selected' : ''}`}
+                            onClick={() => {
+                              handleSwitchDevice(dev.deviceKey);
+                              setIsDeviceMenuOpen(false);
+                            }}
+                            role="menuitem"
+                          >
+                            <div className="device-chip-icon">
+                              <Radio size={14} />
+                            </div>
+                            <div className="context-item-info">
+                              <div className="device-title-row">
+                                <strong className="item-title">{dev.deviceKey}</strong>
+                                <span className={`device-conn-tag ${isOnline ? 'tag--online' : isAwaiting || isStale ? 'tag--waiting' : 'tag--offline'}`}>
+                                  {statusLabel}
+                                </span>
+                              </div>
+                              <span className="item-meta">
+                                {dev.hardwareModel || 'ESP32 Smart Band'}
+                              </span>
+                            </div>
+                            {isSelected && <Check size={14} className="text-teal item-check" />}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                  <div className="context-dropdown-footer">
+                    <button
+                      type="button"
+                      className="btn-link-new-device"
+                      onClick={() => {
+                        setIsDeviceMenuOpen(false);
+                        setNewChildNameInput(monitoredName);
+                        setShowLinkDeviceModal(true);
+                      }}
+                    >
+                      <Plus size={13} />
+                      <span>Link another device to {monitoredName.split(' ')[0]}</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
 
@@ -921,7 +1100,7 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
           </nav>
         </div>
 
-        {/* Right: Telemetry Live Indicator, Inspector Shortcut, Logout */}
+        {/* Right: Telemetry Live Indicator, Inspector Shortcut, Authenticated Caregiver Account */}
         <div className="caretag-header-right">
           {/* Live Telemetry / Simulation Badge */}
           {(() => {
@@ -966,15 +1145,63 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
             <span className="header-btn-text">Inspector</span>
           </button>
 
-          <button
-            type="button"
-            className="header-logout-btn"
-            onClick={onLogout}
-            title={`Signed in as ${session.email} • Click to Sign Out`}
-          >
-            <LogOut size={15} />
-            <span className="header-logout-text">Sign Out</span>
-          </button>
+          {/* Authenticated Caregiver Account Menu */}
+          <div className="caregiver-account-wrap" ref={accountMenuRef}>
+            <button
+              type="button"
+              className={`caregiver-account-pill ${isAccountMenuOpen ? 'is-open' : ''}`}
+              onClick={() => {
+                setIsAccountMenuOpen(o => !o);
+                setIsPersonMenuOpen(false);
+                setIsDeviceMenuOpen(false);
+              }}
+              title={`Signed in as ${caregiverName} (${session.email})`}
+              aria-haspopup="true"
+              aria-expanded={isAccountMenuOpen}
+            >
+              <div className="caregiver-avatar">
+                <span>{caregiverInitial}</span>
+              </div>
+              <div className="caregiver-meta">
+                <span className="caregiver-name">{caregiverName}</span>
+                <span className="caregiver-role-tag">{caregiverRoleLabel}</span>
+              </div>
+              <ChevronDown size={13} className="account-dropdown-chevron" />
+            </button>
+
+            {isAccountMenuOpen && (
+              <div className="account-menu-dropdown" role="menu">
+                <div className="account-user-card">
+                  <div className="account-user-avatar">
+                    <span>{caregiverInitial}</span>
+                  </div>
+                  <div className="account-user-info">
+                    <strong className="account-user-name">{caregiverName}</strong>
+                    <span className="account-user-email">{session.email}</span>
+                    <span className="account-user-role-badge">{caregiverRoleLabel}</span>
+                    {session.department && (
+                      <span className="account-user-dept">{session.department}</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="account-menu-divider" />
+
+                <button
+                  type="button"
+                  className="account-logout-item"
+                  onClick={() => {
+                    setIsAccountMenuOpen(false);
+                    onLogout();
+                  }}
+                  role="menuitem"
+                >
+                  <LogOut size={14} />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -1039,7 +1266,7 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
       )}
 
       {/* ── Main Workspace: Two-Column Responsive Layout ── */}
-      <main className={`caretag-main-workspace ${isMapExpanded ? 'caretag-main-workspace--expanded-map' : ''}`}>
+      <main className={`caretag-main-workspace ${isMapExpanded || activeTab === 'map' ? 'caretag-main-workspace--expanded-map' : ''} caretag-main-workspace--tab-${activeTab}`}>
         
         {/* ── Map Pane (Primary Visual Workspace) ── */}
         <section className="caretag-map-pane" aria-label="Live Geofence Map">
@@ -1470,8 +1697,17 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
               selectedDeviceKey={selectedDeviceKey}
               activeProfile={activeProfile}
               devicesList={devicesList}
+              caregiverName={session?.name || 'Bhavishya Singla'}
               onSwitchDevice={handleSwitchDevice}
               onOpenLinkDevice={() => setShowLinkDeviceModal(true)}
+              onOpenMap={() => {
+                setActiveTab('map');
+                setIsMapExpanded(true);
+              }}
+              onOpenAlerts={() => {
+                setActiveTab('alerts');
+                setIsMapExpanded(false);
+              }}
               tripMode={tripMode}
               onSetTripMode={handleSetTripMode}
               onEndTripMode={handleEndTripMode}
@@ -1487,21 +1723,30 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
         </section>
       </main>
 
-      {/* ── Native-Feeling Mobile Bottom Dock Navigation (Thumb-friendly on phones) ── */}
+      {/* ── Native-Feeling Mobile Bottom Dock Navigation (Specification Section 5) ── */}
       <nav className="caretag-mobile-bottom-dock" aria-label="Mobile Navigation Bar">
         <button
           type="button"
-          className={`mobile-dock-btn ${activeTab === 'overview' && !showSetupWizard ? 'active' : ''}`}
-          onClick={() => { setActiveTab('overview'); setShowSetupWizard(false); setIsMapExpanded(false); }}
+          className={`mobile-dock-btn ${activeTab === 'overview' && !showSetupWizard && !showMoreMenu ? 'active' : ''}`}
+          onClick={() => { setActiveTab('overview'); setShowSetupWizard(false); setIsMapExpanded(false); setShowMoreMenu(false); }}
         >
           <Shield size={18} />
-          <span>Home</span>
+          <span>Overview</span>
         </button>
 
         <button
           type="button"
-          className={`mobile-dock-btn ${activeTab === 'safezones' && !showSetupWizard ? 'active' : ''}`}
-          onClick={() => { setActiveTab('safezones'); setShowSetupWizard(false); setIsMapExpanded(false); }}
+          className={`mobile-dock-btn ${activeTab === 'map' && !showSetupWizard && !showMoreMenu ? 'active' : ''}`}
+          onClick={() => { setActiveTab('map'); setShowSetupWizard(false); setIsMapExpanded(true); setShowMoreMenu(false); }}
+        >
+          <Compass size={18} />
+          <span>Map</span>
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-dock-btn ${activeTab === 'safezones' && !showSetupWizard && !showMoreMenu ? 'active' : ''}`}
+          onClick={() => { setActiveTab('safezones'); setShowSetupWizard(false); setIsMapExpanded(false); setShowMoreMenu(false); }}
         >
           <MapPin size={18} />
           <span>Safe Places</span>
@@ -1510,8 +1755,8 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
 
         <button
           type="button"
-          className={`mobile-dock-btn ${activeTab === 'alerts' && !showSetupWizard ? 'active' : ''}`}
-          onClick={() => { setActiveTab('alerts'); setShowSetupWizard(false); setIsMapExpanded(false); }}
+          className={`mobile-dock-btn ${activeTab === 'alerts' && !showSetupWizard && !showMoreMenu ? 'active' : ''}`}
+          onClick={() => { setActiveTab('alerts'); setShowSetupWizard(false); setIsMapExpanded(false); setShowMoreMenu(false); }}
         >
           <Bell size={18} />
           <span>Alerts</span>
@@ -1520,26 +1765,137 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
 
         <button
           type="button"
-          className={`mobile-dock-btn ${showSetupWizard ? 'active' : ''}`}
-          onClick={() => { setShowSetupWizard(true); setIsMapExpanded(false); }}
+          className={`mobile-dock-btn ${showMoreMenu || activeTab === 'inspector' || showSetupWizard ? 'active' : ''}`}
+          onClick={() => setShowMoreMenu(m => !m)}
+          aria-expanded={showMoreMenu}
+          aria-haspopup="dialog"
+          title="More tools and account options"
         >
           <Sliders size={18} />
-          <span>Setup</span>
-        </button>
-
-        <button
-          type="button"
-          className={`mobile-dock-btn ${activeTab === 'inspector' && !showSetupWizard ? 'active' : ''}`}
-          onClick={() => {
-            setShowSetupWizard(false);
-            setIsMapExpanded(false);
-            setActiveTab(t => t === 'inspector' ? 'overview' : 'inspector');
-          }}
-        >
-          <Terminal size={18} />
-          <span>Inspector</span>
+          <span>More</span>
         </button>
       </nav>
+
+      {/* ── Mobile More Overflow Bottom Sheet (Specification Section 5) ── */}
+      {showMoreMenu && (
+        <div
+          className="caretag-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="mobile-more-title"
+          onClick={() => setShowMoreMenu(false)}
+        >
+          <div
+            className="caretag-modal-card drawer-modal-card mobile-more-sheet"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div className="modal-title-wrap">
+                <Sliders size={18} className="text-blue" />
+                <h3 id="mobile-more-title">More Options &amp; Tools</h3>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setShowMoreMenu(false)}
+                aria-label="Close menu"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="mobile-more-content">
+              {/* Caregiver Identity Card */}
+              <div className="mobile-more-account-card">
+                <div className="more-account-avatar">
+                  <span>{(session?.name?.trim().charAt(0) || 'C').toUpperCase()}</span>
+                </div>
+                <div className="more-account-info">
+                  <strong className="more-account-name">{session?.name || 'Caregiver User'}</strong>
+                  <span className="more-account-email">{session?.email || 'Caregiver Account'}</span>
+                  <span className="more-account-role">Caregiver Administrator</span>
+                </div>
+              </div>
+
+              {/* Action Rows */}
+              <div className="mobile-more-actions-list">
+                <button
+                  type="button"
+                  className="mobile-more-action-item"
+                  onClick={() => {
+                    setShowMoreMenu(false);
+                    handleOpenInspector();
+                  }}
+                >
+                  <div className="more-action-icon-wrap">
+                    <Terminal size={18} className="text-blue" />
+                  </div>
+                  <div className="more-action-text">
+                    <strong>Technical Inspector</strong>
+                    <span>Live telemetry, sensor evaluation, and capstone presets</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className="mobile-more-action-item"
+                  onClick={() => {
+                    setShowMoreMenu(false);
+                    setIsMapExpanded(false);
+                    setShowSetupWizard(true);
+                  }}
+                >
+                  <div className="more-action-icon-wrap">
+                    <Sliders size={18} className="text-teal" />
+                  </div>
+                  <div className="more-action-text">
+                    <strong>Guided Setup Wizard</strong>
+                    <span>Step-by-step geofence creation and alert setup</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className="mobile-more-action-item"
+                  onClick={() => {
+                    setShowMoreMenu(false);
+                    if (tripMode.active) {
+                      handleEndTripMode();
+                    } else {
+                      handleSetTripMode(60);
+                    }
+                  }}
+                >
+                  <div className="more-action-icon-wrap">
+                    <Car size={18} className="text-amber" />
+                  </div>
+                  <div className="more-action-text">
+                    <strong>{tripMode.active ? 'End Trip Mode' : 'Start 1-Hour Trip Mode'}</strong>
+                    <span>{tripMode.active ? `Active · auto-restores in ${tripMode.formattedRemaining}` : 'Pause deviation alerts while travelling together'}</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className="mobile-more-action-item mobile-more-action-item--danger"
+                  onClick={() => {
+                    setShowMoreMenu(false);
+                    onLogout();
+                  }}
+                >
+                  <div className="more-action-icon-wrap">
+                    <LogOut size={18} />
+                  </div>
+                  <div className="more-action-text">
+                    <strong>Sign Out</strong>
+                    <span>Sign out of caregiver monitoring session</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Link New Smart Band Modal ── */}
       {showLinkDeviceModal && (

@@ -19,7 +19,10 @@ import {
   Bell,
   Car,
   Crosshair,
-  ChevronRight
+  ChevronRight,
+  ChevronDown,
+  Smartphone,
+  User
 } from 'lucide-react';
 import {
   formatLocationFreshness,
@@ -56,6 +59,9 @@ export default function CaregiverOverview({
   devicesList = [],
   onSwitchDevice,
   onOpenLinkDevice,
+  caregiverName = 'Bhavishya Singla',
+  onOpenMap,
+  onOpenAlerts,
   tripMode = { active: false, expiresAt: null, durationMinutes: 0 },
   onSetTripMode,
   onEndTripMode,
@@ -64,6 +70,10 @@ export default function CaregiverOverview({
   onOpenSafeZones,
   onOpenTechInspector,
 }) {
+  const [showDeviceModal, setShowDeviceModal] = useState(false);
+  const monitoredName = activeProfile?.childName || 'Monitored Profile';
+  const monitoredInitial = (monitoredName.trim().charAt(0) || 'C').toUpperCase();
+
   const safety = evaluateSafetyState(packet, geofences);
   const freshness = formatLocationFreshness(packet?.timestamp || packet?.capturedAtUtc);
 
@@ -195,6 +205,22 @@ export default function CaregiverOverview({
   // 'connection' | 'data' | 'battery' | 'location' | 'routine' | 'alerts' | null
   const [activeDrawer, setActiveDrawer] = useState(null);
 
+  // Lock background scrolling & support Escape key when modal is open
+  useEffect(() => {
+    if (activeDrawer) {
+      const origOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      const onKeyDown = (e) => {
+        if (e.key === 'Escape') setActiveDrawer(null);
+      };
+      window.addEventListener('keydown', onKeyDown);
+      return () => {
+        document.body.style.overflow = origOverflow;
+        window.removeEventListener('keydown', onKeyDown);
+      };
+    }
+  }, [activeDrawer]);
+
   // Alert preferences state
   const userId = activeProfile?.userId || 'caregiver_current';
   const [alertPrefs, setAlertPrefs] = useState(() => alertStore.getAlertPreferences(userId, selectedDeviceKey));
@@ -245,6 +271,57 @@ export default function CaregiverOverview({
   return (
     <div className="caregiver-overview">
 
+      {/* ── 1. SELECTED PERSON & DEVICE SELECTOR CARD (Specification Section 6) ── */}
+      <section className="monitored-context-card" aria-label="Monitored Person Context">
+        <div className="monitored-context-header">
+          <div className="monitored-kicker-wrap">
+            <span className="monitored-context-kicker">Currently Monitoring</span>
+            <span className="monitored-status-dot dot--active" />
+          </div>
+          <span className="monitored-caregiver-badge" title={`Signed in as caregiver: ${caregiverName}`}>
+            <User size={12} className="caregiver-badge-icon" />
+            <span>Caregiver: <strong>{caregiverName}</strong></span>
+          </span>
+        </div>
+
+        <div className="monitored-context-main">
+          <div className="monitored-person-row">
+            <div
+              className="monitored-avatar"
+              style={{ backgroundColor: activeProfile?.avatarColor || '#2563EB' }}
+            >
+              <span>{monitoredInitial}</span>
+            </div>
+            <div className="monitored-identity">
+              <h2 className="monitored-name">{monitoredName}</h2>
+              <p className="monitored-device-meta">
+                <span>{activeProfile?.hardwareModel || 'Smart Band'}</span>
+                <span className="meta-bullet">•</span>
+                <span className="device-id-mono">{selectedDeviceKey}</span>
+                {activeProfile?.relation && (
+                  <>
+                    <span className="meta-bullet">•</span>
+                    <span>{activeProfile.relation}</span>
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="btn-switch-profile"
+            onClick={() => setShowDeviceModal(true)}
+            aria-haspopup="dialog"
+            aria-expanded={showDeviceModal}
+            title="Switch monitored person or wearable band"
+          >
+            <span>Switch</span>
+            <ChevronDown size={14} />
+          </button>
+        </div>
+      </section>
+
       {/* ── ACTIVE INCIDENT BANNER (Only when breach or deviation requires urgent attention) ── */}
       {topActiveAlert && (
         <aside className="caregiver-attention-card" role="alert" aria-live="assertive">
@@ -283,273 +360,343 @@ export default function CaregiverOverview({
         </aside>
       )}
 
-      {/* ── BENTO-STYLE STATUS OVERVIEW (Minimal, Purpose-Built Hierarchy) ── */}
-      <section className="caregiver-bento-section" aria-label="Caregiver Status Summary">
-        <div className="caregiver-bento-grid">
+      {/* ── 2. CAREGIVER QUICK ACTIONS (Specification Section 7) ── */}
+      <nav className="dashboard-quick-actions" aria-label="Caregiver Quick Actions">
+        <button
+          type="button"
+          className="quick-action-pill"
+          onClick={onOpenSafeZones}
+          title="Open Safe Places Management"
+        >
+          <MapPin size={13} className="text-teal" />
+          <span>Safe places ({geofences.length})</span>
+        </button>
 
-          {/* Bento Card 1: Device Connection & Incoming Telemetry (Primary Prominent Card) */}
-          <div
-            className={`bento-card bento-card--connection bento-card--span-2 ${
-              simRunning
-                ? 'bento-card--sim'
+        <button
+          type="button"
+          className="quick-action-pill"
+          onClick={() => {
+            const el = document.querySelector('.movement-timeline-card');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }}
+          title="Review today's movement history"
+        >
+          <Footprints size={13} className="text-blue" />
+          <span>Movement ({hasRealMovementPoints ? todayHistory.points.length : 0})</span>
+        </button>
+
+        <button
+          type="button"
+          className="quick-action-pill"
+          onClick={onOpenAlerts}
+          title="View Safety Alerts History"
+        >
+          <Bell size={13} className={activeAlerts.length > 0 ? 'text-warning' : 'text-teal'} />
+          <span>Alerts {activeAlerts.length > 0 ? `(${activeAlerts.length})` : ''}</span>
+        </button>
+
+        <button
+          type="button"
+          className="quick-action-pill"
+          onClick={() => {
+            if (onOpenTechInspector) {
+              onOpenTechInspector();
+            } else {
+              setActiveDrawer('connection');
+            }
+          }}
+          title="Inspect device telemetry and connection"
+        >
+          <Radio size={13} className="text-blue" />
+          <span>Diagnostics</span>
+        </button>
+      </nav>
+
+      {/* ── ROW 1: OVERVIEW ROW (2 Equal Columns: Device Connection & Location Status) ── */}
+      <section className="dashboard-grid-row overview-row" aria-label="Device Connection and Location Overview">
+        {/* Card 1: Device Connection & Incoming Telemetry */}
+        <div
+          className={`dashboard-card bento-card bento-card--connection ${
+            simRunning
+              ? 'card-state--sim'
+              : devMeta.isLive
+              ? 'card-state--live'
+              : devMeta.isStale
+              ? 'card-state--stale'
+              : hardwareStatus?.deviceStatus === DEVICE_STATUS.CONNECTION_ERROR
+              ? 'card-state--error'
+              : 'card-state--offline'
+          }`}
+          onClick={() => setActiveDrawer('connection')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveDrawer('connection'); } }}
+          title="Click to view device connection details, packet age, and troubleshooting"
+        >
+          <div className="card-header bento-card-top">
+            <div className="card-title-group bento-card-title-wrap">
+              <Radio size={16} className="card-icon bento-icon" />
+              <span className="card-kicker bento-card-label">Device Connection</span>
+            </div>
+            <span className={`status-dot bento-status-dot ${devMeta.isLive ? 'dot--live' : devMeta.isStale ? 'dot--stale' : 'dot--offline'}`} />
+          </div>
+
+          <div className="card-body bento-card-body">
+            <strong className="card-main-val bento-card-value">
+              {simRunning
+                ? 'Sim Stream Active'
                 : devMeta.isLive
-                ? 'bento-card--live'
+                ? 'Connected'
                 : devMeta.isStale
-                ? 'bento-card--stale'
+                ? 'Awaiting Heartbeat'
                 : hardwareStatus?.deviceStatus === DEVICE_STATUS.CONNECTION_ERROR
-                ? 'bento-card--error'
-                : 'bento-card--offline'
-            }`}
-            onClick={() => setActiveDrawer('connection')}
-            role="button"
-            tabIndex={0}
-            title="Click to view device connection details, packet age, and troubleshooting"
-          >
-            <div className="bento-card-top">
-              <div className="bento-card-title-wrap">
-                <Radio size={14} className="bento-icon" />
-                <span className="bento-card-label">Device Connection</span>
-              </div>
-              <span className={`bento-status-dot ${devMeta.isLive ? 'dot--live' : devMeta.isStale ? 'dot--stale' : 'dot--offline'}`} />
-            </div>
-
-            <div className="bento-card-body">
-              <strong className="bento-card-value">
-                {simRunning
-                  ? 'Sim Stream Active'
-                  : devMeta.isLive
-                  ? 'Connected'
-                  : devMeta.isStale
-                  ? 'Awaiting Heartbeat'
-                  : hardwareStatus?.deviceStatus === DEVICE_STATUS.CONNECTION_ERROR
-                  ? 'Connection Issue'
-                  : 'Offline'}
-              </strong>
-              <p className="bento-card-sub">
-                {simRunning
-                  ? 'Demonstration simulation active'
-                  : devMeta.isLive
-                  ? `Last update ${hardwareStatus?.formattedAge || 'Just now'}`
-                  : hardwareStatus?.formattedAge
-                  ? `Last update ${hardwareStatus.formattedAge}`
-                  : 'No device heartbeat received'}
-              </p>
-            </div>
-
-            <div className="bento-card-footer">
-              <span className="bento-stream-tag">
-                <span className={`tiny-indicator-dot ${isBandLive ? 'dot--live' : 'dot--idle'}`} />
-                {isBandLive ? 'Receiving Live Data' : 'Awaiting sensor update'}
-              </span>
-              <span className="bento-action-hint">Details &rarr;</span>
-            </div>
+                ? 'Connection Issue'
+                : 'Offline'}
+            </strong>
+            <p className="card-subtext bento-card-sub">
+              {simRunning
+                ? 'Demonstration simulation active'
+                : devMeta.isLive
+                ? `Last update ${hardwareStatus?.formattedAge || 'Just now'}`
+                : hardwareStatus?.formattedAge
+                ? `Last update ${hardwareStatus.formattedAge}`
+                : 'No device heartbeat received'}
+            </p>
           </div>
 
-          {/* Bento Card 2: Physical Location (Prominent Card) */}
-          <div
-            className={`bento-card bento-card--location bento-card--span-2 ${
-              locationStatusType === 'alert'
-                ? 'bento-card--error'
-                : locationStatusType === 'warn'
-                ? 'bento-card--stale'
-                : locationStatusType === 'safe'
-                ? 'bento-card--live'
-                : 'bento-card--neutral'
-            }`}
-            onClick={() => setActiveDrawer('location')}
-            role="button"
-            tabIndex={0}
-            title="Click for exact coordinates, perimeter evaluation, and map centering"
-          >
-            <div className="bento-card-top">
-              <div className="bento-card-title-wrap">
-                <MapPin size={14} className="bento-icon" />
-                <span className="bento-card-label">{locationHeading}</span>
-              </div>
-              <button
-                type="button"
-                className="bento-recenter-icon-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (onRecenterMap) onRecenterMap();
-                }}
-                title="Recenter Map on Child"
-              >
-                <Crosshair size={13} />
-              </button>
-            </div>
+          <div className="card-footer bento-card-footer">
+            <span className="card-footer-meta bento-stream-tag">
+              <span className={`tiny-indicator-dot ${isBandLive ? 'dot--live' : 'dot--idle'}`} />
+              <span>{isBandLive ? 'Receiving Live Data' : 'Awaiting sensor update'}</span>
+            </span>
+            <span className="card-action-hint bento-action-hint">Details &rarr;</span>
+          </div>
+        </div>
 
-            <div className="bento-card-body">
-              <strong className="bento-card-value" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {locationTitle}
-              </strong>
-              <p className="bento-card-sub">
-                {locationSubtext}
-              </p>
+        {/* Card 2: Physical Location */}
+        <div
+          className={`dashboard-card bento-card bento-card--location ${
+            locationStatusType === 'alert'
+              ? 'card-state--error'
+              : locationStatusType === 'warn'
+              ? 'card-state--stale'
+              : locationStatusType === 'safe'
+              ? 'card-state--live'
+              : 'card-state--neutral'
+          }`}
+          onClick={() => setActiveDrawer('location')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveDrawer('location'); } }}
+          title="Click for exact coordinates, perimeter evaluation, and map centering"
+        >
+          <div className="card-header bento-card-top">
+            <div className="card-title-group bento-card-title-wrap">
+              <MapPin size={16} className="card-icon bento-icon" />
+              <span className="card-kicker bento-card-label">{locationHeading}</span>
             </div>
-
-            <div className="bento-card-footer">
-              <span className="bento-stream-tag">
-                {hasValidCoordinates
-                  ? (isFixFresh ? '3D Satellite Fix' : `Fix age: ${freshness.text}`)
-                  : 'GPS fix pending'}
-              </span>
-              <span className="bento-action-hint">View on Map &rarr;</span>
-            </div>
+            <button
+              type="button"
+              className="card-recenter-btn bento-recenter-icon-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onRecenterMap) onRecenterMap();
+              }}
+              title="Recenter Map on Child"
+            >
+              <Crosshair size={13} />
+            </button>
           </div>
 
-          {/* Bento Card 3: Battery Health (Compact) */}
-          <div
-            className={`bento-card bento-card--battery ${
-              batteryHealthState === 'Good'
-                ? 'bento-card--live'
-                : batteryHealthState === 'Low'
-                ? 'bento-card--stale'
-                : batteryHealthState === 'Critical'
-                ? 'bento-card--error'
-                : 'bento-card--neutral'
-            }`}
-            onClick={() => setActiveDrawer('battery')}
-            role="button"
-            tabIndex={0}
-            title="Click to view battery health, runtime estimate, and charging advice"
-          >
-            <div className="bento-card-top">
-              <div className="bento-card-title-wrap">
-                {isBatteryLow ? <BatteryLow size={14} className="text-warning" /> : <Battery size={14} className="bento-icon" />}
-                <span className="bento-card-label">Battery</span>
-              </div>
-            </div>
-
-            <div className="bento-card-body">
-              <strong className="bento-card-value">
-                {rawBattery != null ? `${rawBattery}%` : '92%'}
-              </strong>
-              <p className="bento-card-sub">
-                {rawBattery != null
-                  ? (isBatteryLow ? 'Recharge recommended' : 'Nominal (~18h runtime)')
-                  : 'Nominal (~18h runtime)'}
-              </p>
-            </div>
-
-            <div className="bento-card-footer">
-              <div className="compact-battery-track">
-                <div
-                  className={`compact-battery-fill ${isBatteryLow ? 'fill-low' : 'fill-good'}`}
-                  style={{ width: `${Math.min(100, Math.max(8, batteryLevel))}%` }}
-                />
-              </div>
-            </div>
+          <div className="card-body bento-card-body">
+            <strong className="card-main-val bento-card-value">
+              {locationTitle}
+            </strong>
+            <p className="card-subtext bento-card-sub">
+              {locationSubtext}
+            </p>
           </div>
 
-          {/* Bento Card 4: Daily Routine (Wider Card) */}
-          <div
-            className={`bento-card bento-card--routine bento-card--span-2 ${
-              hasRoutineLearned
-                ? 'bento-card--live'
-                : recordedDaysCount > 0
-                ? 'bento-card--stale'
-                : 'bento-card--neutral'
-            }`}
-            onClick={() => setActiveDrawer('routine')}
-            role="button"
-            tabIndex={0}
-            title="Click to view learned commute corridor, transit windows, and observation history"
-          >
-            <div className="bento-card-top">
-              <div className="bento-card-title-wrap">
-                <Activity size={14} className="bento-icon" />
-                <span className="bento-card-label">Daily Routine</span>
-              </div>
-              <span className={`bento-routine-badge ${hasRoutineLearned ? 'badge--learned' : 'badge--learning'}`}>
-                {hasRoutineLearned ? 'Learned' : recordedDaysCount > 0 ? 'Learning' : 'Insufficient Data'}
-              </span>
-            </div>
-
-            <div className="bento-card-body">
-              <strong className="bento-card-value">
-                {hasRoutineLearned
-                  ? 'Routine Learned'
-                  : recordedDaysCount > 0
-                  ? `Learning (${recordedDaysCount}/3 days)`
-                  : 'Insufficient History'}
-              </strong>
-              <p className="bento-card-sub">
-                {hasRoutineLearned
-                  ? `Usual journey: ${primaryRouteName}`
-                  : recordedDaysCount > 0
-                  ? `${profile?.totalValidObservations || 0} valid observations recorded`
-                  : 'More valid observations needed'}
-              </p>
-            </div>
-
-            <div className="bento-card-footer">
-              <span className="bento-stream-tag">
-                {hasRoutineLearned
-                  ? `Departure window: ${profile?.primaryRoute?.departureWindow || '07:40 – 08:00 AM'}`
-                  : 'Awaiting 3 commute journeys'}
-              </span>
-              <span className="bento-action-hint">Routine details &rarr;</span>
-            </div>
+          <div className="card-footer bento-card-footer">
+            <span className="card-footer-meta bento-stream-tag">
+              {hasValidCoordinates
+                ? (isFixFresh ? '3D Satellite Fix' : `Fix age: ${freshness.text}`)
+                : 'GPS fix pending'}
+            </span>
+            <span className="card-action-hint bento-action-hint">View on Map &rarr;</span>
           </div>
-
-          {/* Bento Card 5: Alerts & Trip Mode (Compact) */}
-          <div
-            className={`bento-card bento-card--alerts ${
-              tripMode.active
-                ? 'bento-card--stale'
-                : alertPrefs.deviationAlerts
-                ? 'bento-card--live'
-                : 'bento-card--neutral'
-            }`}
-            onClick={() => setActiveDrawer('alerts')}
-            role="button"
-            tabIndex={0}
-            title="Click to toggle Trip Mode, test alarms, and set alert preferences"
-          >
-            <div className="bento-card-top">
-              <div className="bento-card-title-wrap">
-                {tripMode.active ? <Car size={14} className="text-warning" /> : <Bell size={14} className="bento-icon" />}
-                <span className="bento-card-label">Alerts</span>
-              </div>
-            </div>
-
-            <div className="bento-card-body">
-              <strong className="bento-card-value">
-                {tripMode.active
-                  ? 'Trip Mode'
-                  : alertPrefs.deviationAlerts
-                  ? 'Monitoring'
-                  : 'Muted'}
-              </strong>
-              <p className="bento-card-sub">
-                {tripMode.active
-                  ? `Expires in ${tripMode.formattedRemaining}`
-                  : alertPrefs.deviationAlerts
-                  ? 'Route deviation & perimeter active'
-                  : 'Route alerts paused'}
-              </p>
-            </div>
-
-            <div className="bento-card-footer">
-              <span className="bento-stream-tag">
-                {tripMode.active ? 'Off-route muted' : alertPrefs.voiceAlarms ? 'Voice on' : 'Voice muted'}
-              </span>
-              <span className="bento-action-hint">Manage &rarr;</span>
-            </div>
-          </div>
-
         </div>
       </section>
 
-      {/* ── SECONDARY EDITORIAL ROW: Today's Movement & Safe Places ── */}
-      <section className="caregiver-editorial-row" aria-label="Movement History and Safe Places">
-        
+      {/* ── ROW 2: STATUS SUMMARY ROW (3 Equal Columns: Battery, Daily Routine, Alerts) ── */}
+      <section className="dashboard-grid-row summary-row" aria-label="Status Summary">
+        {/* Card 3: Battery Health */}
+        <div
+          className={`dashboard-card bento-card bento-card--battery ${
+            batteryHealthState === 'Good'
+              ? 'card-state--live'
+              : batteryHealthState === 'Low'
+              ? 'card-state--stale'
+              : batteryHealthState === 'Critical'
+              ? 'card-state--error'
+              : 'card-state--neutral'
+          }`}
+          onClick={() => setActiveDrawer('battery')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveDrawer('battery'); } }}
+          title="Click to view battery health, runtime estimate, and charging advice"
+        >
+          <div className="card-header bento-card-top">
+            <div className="card-title-group bento-card-title-wrap">
+              {isBatteryLow ? <BatteryLow size={16} className="text-warning card-icon" /> : <Battery size={16} className="card-icon bento-icon" />}
+              <span className="card-kicker bento-card-label">Battery</span>
+            </div>
+            <span className={`status-pill pill--${batteryHealthState === 'Good' ? 'green' : batteryHealthState === 'Low' ? 'amber' : batteryHealthState === 'Critical' ? 'red' : 'neutral'}`}>
+              {batteryHealthState}
+            </span>
+          </div>
+
+          <div className="card-body bento-card-body">
+            <strong className="card-main-val bento-card-value">
+              {rawBattery != null ? `${rawBattery}%` : 'Awaiting data'}
+            </strong>
+            <p className="card-subtext bento-card-sub">
+              {rawBattery != null
+                ? (isBatteryLow ? 'Recharge recommended' : `Nominal (~${Math.round(batteryLevel * 0.2)}h runtime)`)
+                : 'Awaiting device telemetry'}
+            </p>
+          </div>
+
+          <div className="card-footer bento-card-footer battery-footer">
+            <div className="compact-battery-track">
+              <div
+                className={`compact-battery-fill ${isBatteryLow ? 'fill-low' : 'fill-good'}`}
+                style={{ width: `${Math.min(100, Math.max(8, rawBattery != null ? batteryLevel : 0))}%` }}
+              />
+            </div>
+            <span className="card-action-hint bento-action-hint">Details &rarr;</span>
+          </div>
+        </div>
+
+        {/* Card 4: Daily Routine */}
+        <div
+          className={`dashboard-card bento-card bento-card--routine ${
+            hasRoutineLearned
+              ? 'card-state--live'
+              : recordedDaysCount > 0
+              ? 'card-state--stale'
+              : 'card-state--neutral'
+          }`}
+          onClick={() => setActiveDrawer('routine')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveDrawer('routine'); } }}
+          title="Click to view learned commute corridor, transit windows, and observation history"
+        >
+          <div className="card-header bento-card-top">
+            <div className="card-title-group bento-card-title-wrap">
+              <Activity size={16} className="card-icon bento-icon" />
+              <span className="card-kicker bento-card-label">Daily Routine</span>
+            </div>
+            <span className={`bento-routine-badge ${hasRoutineLearned ? 'badge--learned' : recordedDaysCount > 0 ? 'badge--learning' : 'badge--insufficient'}`}>
+              {hasRoutineLearned ? 'Learned' : recordedDaysCount > 0 ? 'Learning' : 'Insufficient Data'}
+            </span>
+          </div>
+
+          <div className="card-body bento-card-body">
+            <strong className="card-main-val bento-card-value">
+              {hasRoutineLearned
+                ? 'Routine Learned'
+                : recordedDaysCount > 0
+                ? `Building Routine (${recordedDaysCount}/3 days)`
+                : 'Insufficient History'}
+            </strong>
+            <p className="card-subtext bento-card-sub">
+              {hasRoutineLearned
+                ? `Usual journey: ${primaryRouteName}`
+                : recordedDaysCount > 0
+                ? `${profile?.totalValidObservations || 0} valid observations recorded`
+                : 'More valid observations needed'}
+            </p>
+          </div>
+
+          <div className="card-footer bento-card-footer">
+            <span className="card-footer-meta bento-stream-tag">
+              {hasRoutineLearned
+                ? `Departure: ${profile?.primaryRoute?.departureWindow || '07:40 – 08:00 AM'}`
+                : 'Awaiting 3 commute journeys'}
+            </span>
+            <span className="card-action-hint bento-action-hint">Routine details &rarr;</span>
+          </div>
+        </div>
+
+        {/* Card 5: Alerts & Trip Mode */}
+        <div
+          className={`dashboard-card bento-card bento-card--alerts ${
+            tripMode.active
+              ? 'card-state--stale'
+              : alertPrefs.deviationAlerts
+              ? 'card-state--live'
+              : 'card-state--neutral'
+          }`}
+          onClick={() => setActiveDrawer('alerts')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveDrawer('alerts'); } }}
+          title="Click to toggle Trip Mode, test alarms, and set alert preferences"
+        >
+          <div className="card-header bento-card-top">
+            <div className="card-title-group bento-card-title-wrap">
+              {tripMode.active ? <Car size={16} className="text-warning card-icon" /> : <Bell size={16} className="card-icon bento-icon" />}
+              <span className="card-kicker bento-card-label">Alerts</span>
+            </div>
+            {tripMode.active ? (
+              <span className="status-pill pill--amber">Trip Mode</span>
+            ) : activeAlerts.length > 0 ? (
+              <span className="status-pill pill--red">{activeAlerts.length} Active</span>
+            ) : (
+              <span className="status-pill pill--green">Active</span>
+            )}
+          </div>
+
+          <div className="card-body bento-card-body">
+            <strong className="card-main-val bento-card-value">
+              {tripMode.active
+                ? 'Trip Mode Active'
+                : activeAlerts.length > 0
+                ? 'Active Alerts'
+                : alertPrefs.deviationAlerts
+                ? 'Monitoring'
+                : 'Muted'}
+            </strong>
+            <p className="card-subtext bento-card-sub">
+              {tripMode.active
+                ? `Expires in ${tripMode.formattedRemaining}`
+                : activeAlerts.length > 0
+                ? `${activeAlerts.length} unacknowledged safety alert`
+                : alertPrefs.deviationAlerts
+                ? 'Route deviation & perimeter active'
+                : 'Route alerts paused'}
+            </p>
+          </div>
+
+          <div className="card-footer bento-card-footer">
+            <span className="card-footer-meta bento-stream-tag">
+              {tripMode.active ? 'Off-route muted' : alertPrefs.voiceAlarms ? 'Voice on' : 'Voice muted'}
+            </span>
+            <span className="card-action-hint bento-action-hint">Manage alerts &rarr;</span>
+          </div>
+        </div>
+      </section>
+
+      {/* ── ROW 3: PRIMARY WORKSPACE ROW (Movement Timeline & Safe Places) ── */}
+      <section className="dashboard-grid-row workspace-row" aria-label="Movement History and Safe Places">
         {/* Left: Clean Chronological Movement Timeline */}
-        <div className="editorial-card movement-timeline-card">
+        <div className="dashboard-panel editorial-card movement-timeline-card">
           <div className="editorial-card-header">
             <div className="editorial-title-wrap">
-              <Footprints size={15} className="text-teal" />
+              <Footprints size={16} className="text-teal" />
               <h4>Today&apos;s Movement</h4>
             </div>
             <span className="editorial-sub-pill">
@@ -577,7 +724,7 @@ export default function CaregiverOverview({
             </div>
           ) : (
             <div className="timeline-empty-box">
-              <Footprints size={24} color="#94A3B8" />
+              <Footprints size={26} color="#94A3B8" />
               <p className="empty-title">No movement recorded today yet</p>
               <p className="empty-desc">
                 Stay points and transit corridors will appear here chronologically as the Smart Band transmits location data throughout the day.
@@ -586,11 +733,11 @@ export default function CaregiverOverview({
           )}
         </div>
 
-        {/* Right: Organized Safe Places Management */}
-        <div className="editorial-card safeplaces-card">
+        {/* Right: Configured Safe Places */}
+        <div className="dashboard-panel editorial-card safeplaces-card">
           <div className="editorial-card-header">
             <div className="editorial-title-wrap">
-              <MapPin size={15} className="text-teal" />
+              <MapPin size={16} className="text-teal" />
               <h4>Configured Safe Places ({geofences.length})</h4>
             </div>
             <button
@@ -606,7 +753,7 @@ export default function CaregiverOverview({
 
           {geofences.length === 0 ? (
             <div className="safeplaces-empty-box">
-              <MapPin size={24} color="#94A3B8" />
+              <MapPin size={26} color="#94A3B8" />
               <p className="empty-title">No safe places configured yet</p>
               <p className="empty-desc">
                 Add familiar boundaries like Home or School to enable instant boundary breach alerts when your child departs.
@@ -629,6 +776,7 @@ export default function CaregiverOverview({
                   onClick={onOpenSafeZones}
                   role="button"
                   tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenSafeZones(); } }}
                   title={`Click to inspect ${zone.label || zone.name}`}
                 >
                   <div className="safeplace-item-left">
@@ -652,79 +800,80 @@ export default function CaregiverOverview({
             </div>
           )}
         </div>
-
       </section>
 
-      {/* ── NEUTRAL SYSTEM VERIFICATION & DIAGNOSTICS BAR ── */}
-      <section className={`system-summary-bar ${systemHealthClass}`} aria-label="System Connectivity and Health">
-        <div className="system-summary-main">
-          <div className="system-summary-header-row">
-            <div className="system-summary-icon-wrap">
-              {isSystemFullyVerified ? (
-                <CheckCircle size={16} className="text-success" />
-              ) : connectionCheck.firebaseOk ? (
-                <CheckCircle size={16} className="text-teal" />
-              ) : (
-                <AlertTriangle size={16} className="text-warning" />
-              )}
+      {/* ── ROW 4: SYSTEM HEALTH & DIAGNOSTICS ROW (Full Width) ── */}
+      <section className="dashboard-grid-row diagnostics-row" aria-label="System Connectivity and Health">
+        <div className={`dashboard-panel system-summary-bar ${systemHealthClass}`}>
+          <div className="system-summary-main">
+            <div className="system-summary-header-row">
+              <div className="system-summary-icon-wrap">
+                {isSystemFullyVerified ? (
+                  <CheckCircle size={18} className="text-success" />
+                ) : connectionCheck.firebaseOk ? (
+                  <CheckCircle size={18} className="text-teal" />
+                ) : (
+                  <AlertTriangle size={18} className="text-warning" />
+                )}
+              </div>
+              <div className="system-summary-title-group">
+                <h5 className="system-summary-title">{systemHealthTitle}</h5>
+                <p className="system-summary-subtitle">
+                  Firebase Realtime DB, Smart Band telemetry, and CareTag Safety Engine verified independently.
+                </p>
+              </div>
             </div>
-            <div>
-              <h5 className="system-summary-title">{systemHealthTitle}</h5>
-              <p className="system-summary-subtitle">
-                Firebase Realtime DB, Smart Band telemetry, and CareTag Safety Engine verified independently.
-              </p>
+
+            <div className="system-summary-pillars">
+              <div className="summary-pillar">
+                <span className={`pillar-dot ${connectionCheck.firebaseOk ? 'dot--green' : 'dot--red'}`} />
+                <span className="pillar-name">Firebase Realtime DB:</span>
+                <strong className="pillar-value">
+                  {connectionCheck.firebaseOk ? `Connected · ${connectionCheck.latencyMs}ms` : 'Disconnected'}
+                </strong>
+              </div>
+
+              <div className="summary-pillar">
+                <span className={`pillar-dot ${simRunning ? 'dot--blue' : devMeta.isLive ? 'dot--green' : devMeta.isStale ? 'dot--amber' : 'dot--neutral'}`} />
+                <span className="pillar-name">Smart Band Wearable:</span>
+                <strong className="pillar-value">
+                  {simRunning ? 'Simulation Active' : devMeta.isLive ? 'Hardware Streaming Live' : devMeta.isStale ? 'Delayed' : 'Offline / Awaiting Heartbeat'}
+                </strong>
+              </div>
+
+              <div className="summary-pillar">
+                <span className={`pillar-dot ${geofences.length > 0 ? 'dot--green' : 'dot--neutral'}`} />
+                <span className="pillar-name">CareTag Safety Engine:</span>
+                <strong className="pillar-value">
+                  {geofences.length > 0 ? `${geofences.length} Places Active` : '0 Places Configured'}
+                </strong>
+              </div>
             </div>
           </div>
 
-          <div className="system-summary-pillars">
-            <div className="summary-pillar">
-              <span className={`pillar-dot ${connectionCheck.firebaseOk ? 'dot--green' : 'dot--red'}`} />
-              <span className="pillar-name">Firebase Realtime DB:</span>
-              <strong className="pillar-value">
-                {connectionCheck.firebaseOk ? `Connected · ${connectionCheck.latencyMs}ms` : 'Disconnected'}
-              </strong>
-            </div>
-
-            <div className="summary-pillar">
-              <span className={`pillar-dot ${simRunning ? 'dot--blue' : devMeta.isLive ? 'dot--green' : devMeta.isStale ? 'dot--amber' : 'dot--neutral'}`} />
-              <span className="pillar-name">Smart Band Wearable:</span>
-              <strong className="pillar-value">
-                {simRunning ? 'Simulation Active' : devMeta.isLive ? 'Hardware Streaming Live' : devMeta.isStale ? 'Delayed' : 'Offline / Awaiting Heartbeat'}
-              </strong>
-            </div>
-
-            <div className="summary-pillar">
-              <span className={`pillar-dot ${geofences.length > 0 ? 'dot--green' : 'dot--neutral'}`} />
-              <span className="pillar-name">CareTag Safety Engine:</span>
-              <strong className="pillar-value">
-                {geofences.length > 0 ? `${geofences.length} Places Active` : '0 Places Configured'}
-              </strong>
-            </div>
-          </div>
-        </div>
-
-        <div className="system-summary-actions">
-          <button
-            type="button"
-            className="btn-test-connections"
-            onClick={handleVerifyConnections}
-            disabled={connectionCheck.testing}
-            title="Execute live connection test across Firebase and telemetry transport"
-          >
-            <RefreshCw size={13} className={connectionCheck.testing ? 'spin' : ''} />
-            <span>{connectionCheck.testing ? 'Testing...' : 'Test Connections'}</span>
-          </button>
-          {onOpenTechInspector && (
+          <div className="system-summary-actions">
             <button
               type="button"
-              className="btn-open-inspector-subtle"
-              onClick={onOpenTechInspector}
-              title="Open Technical Inspector for comprehensive evaluation"
+              className="btn-test-connections"
+              onClick={handleVerifyConnections}
+              disabled={connectionCheck.testing}
+              title="Execute live connection test across Firebase and telemetry transport"
             >
-              <Terminal size={13} />
-              <span>Inspector</span>
+              <RefreshCw size={13} className={connectionCheck.testing ? 'spin' : ''} />
+              <span>{connectionCheck.testing ? 'Testing...' : 'Test Connections'}</span>
             </button>
-          )}
+            {onOpenTechInspector && (
+              <button
+                type="button"
+                className="btn-open-inspector-subtle"
+                onClick={onOpenTechInspector}
+                title="Open Technical Inspector for comprehensive evaluation"
+              >
+                <Terminal size={13} />
+                <span>Inspector</span>
+              </button>
+            )}
+          </div>
         </div>
       </section>
 
@@ -1093,6 +1242,101 @@ export default function CaregiverOverview({
                 </>
               )}
 
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── PROFILE & DEVICE SWITCHER BOTTOM SHEET MODAL (Specification Section 6) ── */}
+      {showDeviceModal && (
+        <div
+          className="caretag-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="switch-profile-modal-title"
+          onClick={() => setShowDeviceModal(false)}
+        >
+          <div
+            className="caretag-modal-card drawer-modal-card device-switch-sheet"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div className="modal-title-wrap">
+                <Smartphone size={18} className="text-blue" />
+                <h3 id="switch-profile-modal-title">Switch Monitored Person</h3>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setShowDeviceModal(false)}
+                aria-label="Close dialog"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="device-sheet-content">
+              <p className="device-sheet-subtitle">
+                Caregiver account: <strong>{caregiverName}</strong>. Choose a profile to switch active location, safe boundaries, and alerts.
+              </p>
+
+              <div className="device-switch-grid" role="radiogroup" aria-label="Available Profiles">
+                {devicesList.map((dev) => {
+                  const isCurrent = dev.deviceKey === selectedDeviceKey;
+                  const initial = (dev.childName?.trim().charAt(0) || 'C').toUpperCase();
+
+                  return (
+                    <button
+                      key={dev.id || dev.deviceKey}
+                      type="button"
+                      role="radio"
+                      aria-checked={isCurrent}
+                      className={`device-switch-row ${isCurrent ? 'is-active-device' : ''}`}
+                      onClick={() => {
+                        if (!isCurrent && onSwitchDevice) {
+                          onSwitchDevice(dev.deviceKey);
+                        }
+                        setShowDeviceModal(false);
+                      }}
+                    >
+                      <div
+                        className="device-row-avatar"
+                        style={{ backgroundColor: dev.avatarColor || '#2563EB' }}
+                      >
+                        <span>{initial}</span>
+                      </div>
+                      <div className="device-row-details">
+                        <strong className="device-row-name">{dev.childName}</strong>
+                        <span className="device-row-sub">
+                          {dev.hardwareModel || 'Smart Band'} &bull; <span className="device-key-badge">{dev.deviceKey}</span> {dev.relation ? `&bull; ${dev.relation}` : ''}
+                        </span>
+                      </div>
+                      {isCurrent ? (
+                        <div className="device-row-checked">
+                          <Check size={14} />
+                          <span>Active</span>
+                        </div>
+                      ) : (
+                        <span className="device-row-select-btn">Select</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="device-sheet-actions">
+                <button
+                  type="button"
+                  className="btn-link-band-modal"
+                  onClick={() => {
+                    setShowDeviceModal(false);
+                    if (onOpenLinkDevice) onOpenLinkDevice();
+                  }}
+                >
+                  <Plus size={15} />
+                  <span>Link Another Smart Band</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

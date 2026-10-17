@@ -358,6 +358,7 @@
 .auth-manual-submit-btn {
   width: 100%;
   padding: 11px 16px;
+  min-height: 44px;
   background: #0B2D5B;
   color: #FFFFFF;
   border: none;

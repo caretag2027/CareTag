@@ -561,7 +561,7 @@ export default function TaggyChatbot({
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [calloutDismissed, setCalloutDismissed] = useState(false);
-  const [showQuestions, setShowQuestions] = useState(true);
+  const [showQuestions, setShowQuestions] = useState(false); // Collapsed by default per specification
   const [isOnline, setIsOnline] = useState(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
 
   // Dynamic welcome greeting based on view (landing marketing vs dashboard caregiver)
@@ -592,7 +592,7 @@ What would you like help with?`;
   const messagesEndRef = useRef(null);
   const feedRef = useRef(null);
   const inputRef = useRef(null);
-  const isUserNearBottomRef = useRef(true);
+  const isUserNearBottomRef = useRef(false);
 
   // Synchronize initial welcome greeting when currentView prop changes
   useEffect(() => {
@@ -604,6 +604,10 @@ What would you like help with?`;
         text: getWelcomeText(currentView)
       }
     ]);
+    setShowQuestions(false);
+    if (feedRef.current) {
+      feedRef.current.scrollTop = 0;
+    }
   }, [currentView]);
 
   // Listen for global custom event to open Taggy from any page element (e.g. landing page banner)
@@ -634,17 +638,30 @@ What would you like help with?`;
     isUserNearBottomRef.current = scrollHeight - scrollTop - clientHeight < 120;
   };
 
-  // Scroll to bottom when new response arrives if user is near bottom
+  // Scroll to bottom ONLY for ongoing user/bot messages, NEVER on initial open with just the welcome
   useEffect(() => {
-    if (isOpen && isUserNearBottomRef.current) {
+    if (isOpen && messages.length > 1 && isUserNearBottomRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages, isOpen, isLoading]);
+  }, [messages, isLoading, isOpen]);
 
-  // Focus input when opened
+  // When chatbot is opened, explicitly ensure scroll starts at top with welcome message fully visible
   useEffect(() => {
     if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 150);
+      setShowQuestions(false);
+      isUserNearBottomRef.current = false;
+      if (feedRef.current) {
+        feedRef.current.scrollTop = 0;
+      }
+      const timer = setTimeout(() => {
+        if (feedRef.current) {
+          feedRef.current.scrollTop = 0;
+        }
+        if (typeof window !== 'undefined' && window.innerWidth >= 768) {
+          inputRef.current?.focus();
+        }
+      }, 50);
+      return () => clearTimeout(timer);
     }
   }, [isOpen]);
 
@@ -665,8 +682,11 @@ What would you like help with?`;
         text: getWelcomeText(currentView)
       }
     ]);
-    setShowQuestions(true);
-    isUserNearBottomRef.current = true;
+    setShowQuestions(false);
+    isUserNearBottomRef.current = false;
+    if (feedRef.current) {
+      feedRef.current.scrollTop = 0;
+    }
   };
 
   // Application state passed to context builder
@@ -1166,9 +1186,25 @@ Click **Sign In** below to proceed to the caregiver login page.`,
               );
             })}
 
-            {/* Suggested Questions Grid (Caregiver or Marketing Focused) */}
-            {(messages.length <= 1 || showQuestions) && (
-              <div className="taggy-front-questions">
+            {/* Suggested Questions Toggle Control (Collapsed by default per specification) */}
+            <div className="taggy-suggestions-control-wrap">
+              <button
+                type="button"
+                className="taggy-suggestions-toggle-btn"
+                onClick={() => setShowQuestions(prev => !prev)}
+                aria-expanded={showQuestions}
+                aria-controls="taggy-suggestions-region"
+                title={showQuestions ? 'Hide suggested questions' : 'Show suggested questions'}
+              >
+                <Sparkles size={12} className="sparkle-gold" />
+                <span>{showQuestions ? 'Hide suggested questions' : 'Show suggested questions'}</span>
+                <ChevronDown size={13} className={`taggy-chevron ${showQuestions ? 'rotated' : ''}`} />
+              </button>
+            </div>
+
+            {/* Suggested Questions Grid (Only rendered when user explicitly expands) */}
+            {showQuestions && (
+              <div id="taggy-suggestions-region" className="taggy-front-questions" role="region" aria-label="Suggested questions">
                 <div className="front-questions-header">
                   <Sparkles size={12} className="sparkle-gold" />
                   <span>
@@ -1183,7 +1219,7 @@ Click **Sign In** below to proceed to the caregiver login page.`,
                       className="front-question-card"
                       onClick={() => {
                         handleSend(q.prompt);
-                        if (messages.length >= 1) setShowQuestions(false);
+                        setShowQuestions(false);
                       }}
                       disabled={isLoading}
                     >
@@ -1222,9 +1258,12 @@ Click **Sign In** below to proceed to the caregiver login page.`,
                   type="button"
                   className="taggy-toggle-q-btn"
                   onClick={() => setShowQuestions(prev => !prev)}
+                  aria-expanded={showQuestions}
+                  aria-controls="taggy-suggestions-region"
                 >
                   <Sparkles size={11} />
                   <span>{showQuestions ? 'Hide questions' : 'Show suggested questions'}</span>
+                  <ChevronDown size={11} className={`taggy-chevron ${showQuestions ? 'rotated' : ''}`} />
                 </button>
               </div>
             )}
