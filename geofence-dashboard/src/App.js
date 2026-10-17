@@ -34,7 +34,6 @@ import TechnicalInspector from './components/TechnicalInspector';
 import SafeZoneManager from './components/SafeZoneManager';
 import voiceAlarm from './voiceAlarm';
 import {
-  getDeviceStatusMeta,
   DEVICE_STATUS,
   isScheduleActive,
   evaluateSafetyState,
@@ -279,10 +278,7 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
   // ── Multi-Device & Profile Management ──
   const [devicesList, setDevicesList] = useState(() => deviceStore.loadUserDevices(userId));
   const [selectedDeviceKey, setSelectedDeviceKey] = useState(() => deviceStore.getActiveDeviceKey(userId, session.deviceKey || 'CARE-TAG-01'));
-  const [isDeviceMenuOpen, setIsDeviceMenuOpen] = useState(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
-  const deviceMenuRef = useRef(null);
-  const mobileDeviceMenuRef = useRef(null);
   const accountMenuRef = useRef(null);
   const [showLinkDeviceModal, setShowLinkDeviceModal] = useState(false);
   const [newDeviceKeyInput, setNewDeviceKeyInput] = useState('');
@@ -294,19 +290,12 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
   // Close menus on outside click or Escape key
   useEffect(() => {
     function handleClickOutside(e) {
-      if (
-        deviceMenuRef.current && !deviceMenuRef.current.contains(e.target) &&
-        (!mobileDeviceMenuRef.current || !mobileDeviceMenuRef.current.contains(e.target))
-      ) {
-        setIsDeviceMenuOpen(false);
-      }
       if (accountMenuRef.current && !accountMenuRef.current.contains(e.target)) {
         setIsAccountMenuOpen(false);
       }
     }
     function handleKeyDown(e) {
       if (e.key === 'Escape') {
-        setIsDeviceMenuOpen(false);
         setIsAccountMenuOpen(false);
       }
     }
@@ -519,7 +508,6 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
   // ── Device Switch Handler with Clean State Isolation ──
   const handleSwitchDevice = useCallback((newKey) => {
     if (newKey === selectedDeviceKey) {
-      setIsDeviceMenuOpen(false);
       return;
     }
     // Cleanly isolate states: clear previous device data to avoid brief leakage
@@ -543,7 +531,6 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
     setTripModeState(alertStore.getTripMode(userId, newKey));
     setSelectedDeviceKey(newKey);
     deviceStore.setActiveDeviceKey(userId, newKey);
-    setIsDeviceMenuOpen(false);
     const targetDev = devicesList.find(d => d.deviceKey === newKey);
     const targetName = targetDev ? targetDev.childName : newKey;
     pushToast(`Switched active device to ${newKey} (${targetName})`, 'info');
@@ -892,139 +879,8 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
   // Active top alert (only non-nominal)
   const topAlert = alerts.find(a => !a.acknowledged && a.type !== 'nominal_safety');
 
-  // Hardware status metadata & connection indicators for the active device
-  const activeDevMeta = getDeviceStatusMeta(hardwareStatus?.deviceStatus, hardwareStatus?.ageSeconds);
-  const isOnline = simRunning || activeDevMeta.isLive;
-  const isAwaiting = !simRunning && (hardwareStatus?.deviceStatus === DEVICE_STATUS.WAITING_FOR_DATA || hardwareStatus?.deviceStatus === DEVICE_STATUS.CONNECTING);
-  const isStale = !simRunning && activeDevMeta.isStale;
-  const isError = !simRunning && hardwareStatus?.deviceStatus === DEVICE_STATUS.CONNECTION_ERROR;
-  const isGpsSearching = isOnline && (!latest?.lat || !latest?.lng);
-
-  const activeStatusLabel = simRunning
-    ? 'Simulation Active'
-    : isGpsSearching
-    ? 'GPS Searching'
-    : isOnline
-    ? 'Connected'
-    : isAwaiting
-    ? 'Waiting for data'
-    : isStale
-    ? (hardwareStatus?.ageSeconds != null ? `Delayed (${hardwareStatus.ageSeconds}s)` : 'Delayed')
-    : isError
-    ? 'Connection issue'
-    : 'Offline';
-
-  const activeStatusDotClass = simRunning || isOnline
-    ? (isGpsSearching ? 'status-dot--yellow' : 'status-dot--green')
-    : isAwaiting || isStale
-    ? 'status-dot--yellow'
-    : isError
-    ? 'status-dot--red'
-    : 'status-dot--neutral';
-
-  const activeStatusBadgeClass = simRunning
-    ? 'live-source-badge--sim'
-    : isOnline
-    ? 'live-source-badge--hw'
-    : isStale
-    ? 'live-source-badge--stale'
-    : isError
-    ? 'live-source-badge--error'
-    : 'live-source-badge--offline';
-
-  // Render device selector dropdown (shared for desktop and mobile)
-  const renderDeviceDropdown = (isMobile = false) => (
-    <div
-      className={`device-dropdown ${isMobile ? 'device-dropdown--mobile' : ''}`}
-      role="menu"
-      aria-label="Caregiver Authorized Devices"
-    >
-      <div className="device-dropdown-header">
-        <div className="device-dropdown-header-row">
-          <span className="device-dropdown-title">Authorized Devices</span>
-          <span className="device-dropdown-count-pill">{`${devicesList.length} total`}</span>
-        </div>
-        <span className="device-dropdown-sub">Linked wearables paired with your caregiver account</span>
-      </div>
-
-      <div className="device-dropdown-list">
-        {devicesList.length === 0 ? (
-          <div className="device-dropdown-empty">
-            <p>No devices linked to your account yet.</p>
-            <button
-              type="button"
-              className="btn-dropdown-link-new"
-              onClick={() => {
-                setIsDeviceMenuOpen(false);
-                setNewChildNameInput('');
-                setShowLinkDeviceModal(true);
-              }}
-            >
-              <Plus size={13} />
-              <span>Link your first Smart Band</span>
-            </button>
-          </div>
-        ) : (
-          devicesList.map(dev => {
-            const isSelected = dev.deviceKey === selectedDeviceKey;
-            const statusText = isSelected ? activeStatusLabel : 'Standby';
-            const tagClass = isSelected
-              ? (simRunning || isOnline ? 'tag--online' : isAwaiting || isStale ? 'tag--waiting' : 'tag--offline')
-              : 'tag--standby';
-            const avatarColor = dev.avatarColor || '#2563EB';
-            const initial = (dev.childName?.trim().charAt(0) || 'C').toUpperCase();
-
-            return (
-              <button
-                key={dev.id || dev.deviceKey}
-                type="button"
-                className={`device-dropdown-item ${isSelected ? 'is-selected' : ''}`}
-                onClick={() => handleSwitchDevice(dev.deviceKey)}
-                role="menuitem"
-                aria-current={isSelected ? 'true' : undefined}
-              >
-                <div className="device-item-avatar" style={{ backgroundColor: avatarColor }}>
-                  <span>{initial}</span>
-                </div>
-                <div className="device-item-details">
-                  <div className="device-item-top">
-                    <strong className="device-item-key">{dev.deviceKey}</strong>
-                    <span className="device-item-person">{dev.childName}</span>
-                    <span className={`device-item-badge ${tagClass}`}>{statusText}</span>
-                  </div>
-                  <div className="device-item-meta">
-                    <span>{dev.relation || 'Child'} {dev.age ? `· Age ${dev.age}` : ''}</span>
-                    <span className="meta-bullet">•</span>
-                    <span>{dev.hardwareModel || 'Smart Band'}</span>
-                  </div>
-                </div>
-                {isSelected && <Check size={16} className="text-teal item-check" />}
-              </button>
-            );
-          })
-        )}
-      </div>
-
-      <div className="device-dropdown-footer">
-        <button
-          type="button"
-          className="btn-link-new-device"
-          onClick={() => {
-            setIsDeviceMenuOpen(false);
-            setNewChildNameInput('');
-            setShowLinkDeviceModal(true);
-          }}
-        >
-          <Plus size={13} />
-          <span>Link another device to this account</span>
-        </button>
-      </div>
-    </div>
-  );
-
   return (
     <div className="caretag-app-shell">
-      {/* ── Caregiver Navigation Header ── */}
       {/* ── Caregiver Navigation Header ── */}
       <header className="caretag-header" role="banner">
         {/* Left: CareTag Logo */}
@@ -1090,7 +946,6 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
               className={`caregiver-account-pill ${isAccountMenuOpen ? 'is-open' : ''}`}
               onClick={() => {
                 setIsAccountMenuOpen(o => !o);
-                setIsDeviceMenuOpen(false);
               }}
               title={`Signed in as ${caregiverName} (${session.email})`}
               aria-haspopup="true"

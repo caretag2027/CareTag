@@ -28,7 +28,6 @@ import {
   VolumeX,
   Clock,
   Shield,
-  Radio,
   AlertTriangle
 } from 'lucide-react';
 import {
@@ -37,7 +36,7 @@ import {
   isScheduleActive,
   DEVICE_STATUS
 } from '../utils/dashboardUtils';
-import { SCENARIO_PRESETS, SCENARIO_METADATA, DEMO_LOCATIONS } from '../simulation';
+import { SCENARIO_PRESETS, SCENARIO_METADATA } from '../simulation';
 import { diagnoseFirebaseOperations } from '../firebase';
 import { computeRoutineProfile } from '../utils/routineModel';
 import voiceAlarm from '../voiceAlarm';
@@ -72,7 +71,6 @@ export default function TechnicalInspector({
   const [copied, setCopied] = useState(false);
   const [filterModule, setFilterModule] = useState('all');
   const [expandedTechSection, setExpandedTechSection] = useState(false);
-  const [simSpeed, setSimSpeed] = useState(1);
   const [voiceEnabled, setVoiceEnabled] = useState(() => voiceAlarm.isEnabled());
   const [voiceTestStatus, setVoiceTestStatus] = useState('');
 
@@ -512,7 +510,7 @@ export default function TechnicalInspector({
 
       {/* ── PERSISTENT STICKY SCENARIO CONTROL BAR (Section 12) ── */}
       {simRunning && (
-        <aside className="sticky-scenario-control-bar" role="complementary" aria-label="Simulation Controls">
+        <aside className="sticky-scenario-control-bar" aria-label="Simulation Controls">
           <div className="sticky-bar-left">
             <span className="sticky-sim-dot" />
             <div className="sticky-sim-info">
