@@ -890,7 +890,6 @@ export default function CaregiverOverview({
                 <span>GPS Telemetry: {hasValidCoordinates ? `${packet?.latitude?.toFixed(4)}, ${packet?.longitude?.toFixed(4)}` : 'Fix Pending'}</span>
               </div>
             </div>
-          )}
         </div>
       </section>
 
