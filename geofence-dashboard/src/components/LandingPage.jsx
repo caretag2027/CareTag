@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Shield, Activity, Bell, Compass, ArrowRight,
-  ShieldAlert, Sparkles
+  ShieldAlert, Sparkles, Menu, X
 } from 'lucide-react';
 import taggyImg from '../assets/taggy.png';
 import CareTagLogo from './CareTagLogo';
@@ -83,6 +83,7 @@ const teamMembers = [
  */
 export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) {
   const [scrolled, setScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const userName = session?.childName || session?.name || 'Bhavishya Singla';
   const userInitial = (userName.trim().charAt(0) || 'B').toUpperCase();
 
@@ -95,6 +96,34 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Close mobile menu on resize beyond tablet/mobile breakpoint
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener('resize', handleResize, { passive: true });
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setMobileMenuOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleNavClick = useCallback((targetId) => {
+    setMobileMenuOpen(false);
+    const element = document.getElementById(targetId);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, []);
+
   return (
     <div className="landing-page">
       {/* ── 1. Floating Frosted-Glass Header ── */}
@@ -103,17 +132,20 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
           {/* Logo on the left */}
           <div
             className="floating-brand"
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            onClick={() => {
+              setMobileMenuOpen(false);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
             title="CareTag Home"
           >
             <CareTagLogo variant="horizontal" size="sm" showTagline={false} />
           </div>
 
-          {/* Navigation links in the middle */}
+          {/* Navigation links in the middle (Desktop & Tablet) */}
           <nav className="floating-nav" aria-label="Main Navigation">
-            <a href="#how-it-works" className="floating-nav-link">How it works</a>
-            <a href="#preview" className="floating-nav-link">Features</a>
-            <a href="#team" className="floating-nav-link">Built by</a>
+            <a href="#how-it-works" className="floating-nav-link" onClick={() => handleNavClick('how-it-works')}>How it works</a>
+            <a href="#preview" className="floating-nav-link" onClick={() => handleNavClick('preview')}>Features</a>
+            <a href="#team" className="floating-nav-link" onClick={() => handleNavClick('team')}>Built by</a>
           </nav>
 
           {/* Actions on the right */}
@@ -146,8 +178,117 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
               <span>{session ? 'Go to Dashboard' : 'Open dashboard'}</span>
               <ArrowRight size={14} />
             </button>
+
+            {/* Mobile Hamburger / Close Toggle Button */}
+            <button
+              type="button"
+              className="floating-mobile-toggle"
+              onClick={() => setMobileMenuOpen(open => !open)}
+              aria-expanded={mobileMenuOpen}
+              aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+              title={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+            >
+              {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
           </div>
         </header>
+
+        {/* ── Mobile Navigation Dropdown Sheet ── */}
+        {mobileMenuOpen && (
+          <div className="floating-mobile-menu" role="dialog" aria-modal="true" aria-label="Mobile Navigation">
+            <nav className="mobile-menu-links">
+              <a
+                href="#how-it-works"
+                className="mobile-menu-link"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleNavClick('how-it-works');
+                }}
+              >
+                <Compass size={17} className="text-blue" />
+                <span>How it works</span>
+              </a>
+              <a
+                href="#preview"
+                className="mobile-menu-link"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleNavClick('preview');
+                }}
+              >
+                <Activity size={17} className="text-teal" />
+                <span>Features &amp; Routine Model</span>
+              </a>
+              <a
+                href="#team"
+                className="mobile-menu-link"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleNavClick('team');
+                }}
+              >
+                <Shield size={17} className="text-blue" />
+                <span>Built by (Capstone Team)</span>
+              </a>
+            </nav>
+
+            <div className="mobile-menu-divider" />
+
+            <div className="mobile-menu-actions">
+              {session ? (
+                <button
+                  type="button"
+                  className="mobile-menu-user-btn"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onLaunchDashboard();
+                  }}
+                >
+                  <span className="header-avatar-circle">{userInitial}</span>
+                  <div className="mobile-user-info">
+                    <strong>{userName}</strong>
+                    <span>Logged In Profile</span>
+                  </div>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-mobile-secondary"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onOpenAuth();
+                  }}
+                >
+                  Sign in
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="btn-hero-primary mobile-menu-cta"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onLaunchDashboard();
+                }}
+              >
+                <span>{session ? 'Go to Dashboard' : 'Open dashboard'}</span>
+                <ArrowRight size={16} />
+              </button>
+
+              <button
+                type="button"
+                className="mobile-taggy-btn"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  window.dispatchEvent(new CustomEvent('caretag:open-taggy'));
+                }}
+              >
+                <Sparkles size={15} />
+                <span>Chat with Taggy Safety AI</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── 2. Modern Airy Hero Section ── */}

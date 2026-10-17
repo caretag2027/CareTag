@@ -59,12 +59,12 @@ describe('CaregiverOverview Component', () => {
 
     // Verify System Connections banner
     expect(screen.getByText(/All Connections Active & Verified/i)).toBeInTheDocument();
-    expect(screen.getByText(/Firebase Realtime DB/i)).toBeInTheDocument();
-    expect(screen.getByText(/Smart Band Wearable/i)).toBeInTheDocument();
-    expect(screen.getByText(/CareTag Safety Engine/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Firebase Realtime DB/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/Smart Band Wearable/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/CareTag Safety Engine/i).length).toBeGreaterThanOrEqual(1);
   });
 
-  test('renders layman "What this means" callouts on cards', () => {
+  test('reveals plain-English parent explanations when detail cards are inspected', () => {
     render(
       <CaregiverOverview
         packet={mockPacket}
@@ -76,14 +76,35 @@ describe('CaregiverOverview Component', () => {
       />
     );
 
-    // Multiple "What this means" explanations
-    const whatThisMeansHeaders = screen.getAllByText(/What this means:/i);
-    expect(whatThisMeansHeaders.length).toBeGreaterThanOrEqual(4);
+    // Click Device Connection card to open details drawer
+    const connectionCard = screen.getByText(/Device Connection/i).closest('.bento-card');
+    fireEvent.click(connectionCard);
 
-    // Verify plain English parent reassurance
-    expect(screen.getByText(/The child is comfortably within your pre-approved perimeter/i)).toBeInTheDocument();
-    expect(screen.getByText(/The wearable band's GPS sensor is actively tracking satellite coordinates/i)).toBeInTheDocument();
+    // Verify plain English parent reassurance inside drawer
+    expect(screen.getByText(/What this means/i)).toBeInTheDocument();
     expect(screen.getByText(/The wearable band is powered on and streaming packets/i)).toBeInTheDocument();
+
+    // Close drawer
+    fireEvent.click(screen.getByRole('button', { name: /Close Drawer/i }));
+  });
+
+  test('reveals location boundary details when location card is inspected', () => {
+    render(
+      <CaregiverOverview
+        packet={mockPacket}
+        geofences={mockGeofences}
+        alerts={[]}
+        hardwareStatus={mockHardwareStatus}
+        simRunning={false}
+        isLiveHardwareMode={true}
+      />
+    );
+
+    // Click Location card to open details drawer
+    const locationCard = screen.getByText(/Current Location/i).closest('.bento-card');
+    fireEvent.click(locationCard);
+
+    expect(screen.getByText(/The child is comfortably within your pre-approved perimeter/i)).toBeInTheDocument();
   });
 
   test('calls onRecenterMap when clicking Show on Map / Recenter', () => {
@@ -100,7 +121,7 @@ describe('CaregiverOverview Component', () => {
       />
     );
 
-    const recenterBtn = screen.getByText(/Recenter Map/i);
+    const recenterBtn = screen.getByTitle(/Recenter Map on Child/i);
     fireEvent.click(recenterBtn);
     expect(handleRecenter).toHaveBeenCalled();
   });
@@ -155,7 +176,7 @@ describe('CaregiverOverview Component', () => {
     expect(screen.getByText(/Child stepped outside safe place boundary/i)).toBeInTheDocument();
   });
 
-  test('renders caregiver starting priority cards: Wearable Status, Current Location, Today Journey, and Routine', () => {
+  test('renders caregiver core vitals: Smart Band Connection, Current Location, Battery, Daily Routine, and Safe Places', () => {
     render(
       <CaregiverOverview
         packet={mockPacket}
@@ -167,21 +188,23 @@ describe('CaregiverOverview Component', () => {
       />
     );
 
-    // 1. Wearable Device Active / Live Status
-    expect(screen.getByText(/Is the Smart Band Active & Streaming\?/i)).toBeInTheDocument();
-    expect(screen.getByText(/Wearable Active & Transmitting/i)).toBeInTheDocument();
-    expect(screen.getByText(/Live Data Stream/i)).toBeInTheDocument();
+    // 1. Device Connection
+    expect(screen.getByText(/Device Connection/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Connected/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Receiving Live Data/i)).toBeInTheDocument();
 
-    // 2. Where He Is Right Now
-    expect(screen.getByText(/Where is the Child Right Now\?/i)).toBeInTheDocument();
-    expect(screen.getByText(/Safe Inside Boundary/i)).toBeInTheDocument();
+    // 2. Physical Location
+    expect(screen.getByText(/Current Location/i)).toBeInTheDocument();
+    expect(screen.getByText(/Inside Thapar Campus/i)).toBeInTheDocument();
 
-    // 3. First Location Today & Where He Went Today
-    expect(screen.getByText(/Where He Went Today & First Location/i)).toBeInTheDocument();
-    expect(screen.getByText(/First Location Today/i)).toBeInTheDocument();
-    expect(screen.getByText(/Where He Went Today \(Chronological Timeline\)/i)).toBeInTheDocument();
+    // 3. Battery Health
+    expect(screen.getByText(/Battery/i)).toBeInTheDocument();
+    expect(screen.getByText(/92%/i)).toBeInTheDocument();
 
-    // 4. Usual Daily Routine
-    expect(screen.getByText(/Are they following their daily routine\?/i)).toBeInTheDocument();
+    // 4. Daily Routine
+    expect(screen.getByText(/Daily Routine/i)).toBeInTheDocument();
+
+    // 5. Configured Safe Places
+    expect(screen.getByText(/Configured Safe Places \(1\)/i)).toBeInTheDocument();
   });
 });

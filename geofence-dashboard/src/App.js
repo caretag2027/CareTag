@@ -1082,18 +1082,20 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
               <span className="toolbar-btn-text">Safe Places</span>
             </button>
 
-            <button
-              type="button"
-              className={`map-toolbar-btn ${showExpectedRoute ? 'map-toolbar-btn--active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowExpectedRoute(r => !r);
-              }}
-              title="Toggle Learned Route Corridor"
-            >
-              <Navigation size={15} />
-              <span className="toolbar-btn-text">Learned Route</span>
-            </button>
+            {routeWaypoints.length >= 2 && (
+              <button
+                type="button"
+                className={`map-toolbar-btn ${showExpectedRoute ? 'map-toolbar-btn--active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowExpectedRoute(r => !r);
+                }}
+                title="Toggle Learned Route Corridor"
+              >
+                <Navigation size={15} />
+                <span className="toolbar-btn-text">Learned Route</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -1297,9 +1299,13 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
                   : 'Smart Band Offline'
               }
             </span>
-            {latest && (
+            {latest?.lat != null && latest?.lng != null ? (
               <span className="map-footer-item map-footer-coords">
-                <strong>Coordinates:</strong> {latest.lat.toFixed(4)}°N, {latest.lng.toFixed(4)}°E
+                <strong>Coordinates:</strong> {latest.lat.toFixed(4)}°N, {latest.lng.toFixed(4)}°E {latest?.packet?.gps?.valid ? '(3D Fix)' : '(Fix pending)'}
+              </span>
+            ) : (
+              <span className="map-footer-item map-footer-coords">
+                <strong>Coordinates:</strong> Location Unavailable (Waiting for GPS Fix)
               </span>
             )}
           </footer>
@@ -1481,6 +1487,60 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
         </section>
       </main>
 
+      {/* ── Native-Feeling Mobile Bottom Dock Navigation (Thumb-friendly on phones) ── */}
+      <nav className="caretag-mobile-bottom-dock" aria-label="Mobile Navigation Bar">
+        <button
+          type="button"
+          className={`mobile-dock-btn ${activeTab === 'overview' && !showSetupWizard ? 'active' : ''}`}
+          onClick={() => { setActiveTab('overview'); setShowSetupWizard(false); setIsMapExpanded(false); }}
+        >
+          <Shield size={18} />
+          <span>Home</span>
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-dock-btn ${activeTab === 'safezones' && !showSetupWizard ? 'active' : ''}`}
+          onClick={() => { setActiveTab('safezones'); setShowSetupWizard(false); setIsMapExpanded(false); }}
+        >
+          <MapPin size={18} />
+          <span>Safe Places</span>
+          {geofences.length > 0 && <span className="dock-badge">{geofences.length}</span>}
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-dock-btn ${activeTab === 'alerts' && !showSetupWizard ? 'active' : ''}`}
+          onClick={() => { setActiveTab('alerts'); setShowSetupWizard(false); setIsMapExpanded(false); }}
+        >
+          <Bell size={18} />
+          <span>Alerts</span>
+          {unackCount > 0 && <span className="dock-badge dock-badge--warn">{unackCount}</span>}
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-dock-btn ${showSetupWizard ? 'active' : ''}`}
+          onClick={() => { setShowSetupWizard(true); setIsMapExpanded(false); }}
+        >
+          <Sliders size={18} />
+          <span>Setup</span>
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-dock-btn ${activeTab === 'inspector' && !showSetupWizard ? 'active' : ''}`}
+          onClick={() => {
+            setShowSetupWizard(false);
+            setIsMapExpanded(false);
+            setActiveTab(t => t === 'inspector' ? 'overview' : 'inspector');
+          }}
+        >
+          <Terminal size={18} />
+          <span>Inspector</span>
+        </button>
+      </nav>
+
       {/* ── Link New Smart Band Modal ── */}
       {showLinkDeviceModal && (
         <div className="caretag-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="link-device-title">
@@ -1581,24 +1641,6 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
         ))}
       </div>
 
-      {/* ── Taggy AI Companion Chatbot in Dashboard ── */}
-      <TaggyChatbot
-        currentView="dashboard"
-        activeTab={activeTab}
-        hardwareStatus={hardwareStatus}
-        geofences={geofences}
-        alerts={alerts}
-        latest={latest?.packet}
-        simRunning={simRunning}
-        onNavigateTab={handleNavigateTab}
-        onOpenInspector={handleOpenInspector}
-        onRecenterMap={() => {
-          if (latest) {
-            setFlyToTarget({ latlng: [latest.lat, latest.lng], timestamp: Date.now() });
-            pushToast('Centered map on child location', 'info');
-          }
-        }}
-      />
     </div>
   );
 }
