@@ -351,6 +351,7 @@ export default function HeroRoutineSimulation() {
             title={isPlaying ? 'Pause' : 'Play'}
           >
             {isPlaying ? <Pause size={15} /> : <Play size={15} />}
+            <span className="ctrl-btn-text">{isPlaying ? 'Pause' : 'Play'}</span>
           </button>
           <button
             type="button"
@@ -360,6 +361,7 @@ export default function HeroRoutineSimulation() {
             title="Replay from Day 1"
           >
             <RotateCcw size={15} />
+            <span className="ctrl-btn-text">Restart</span>
           </button>
         </div>
       </div>

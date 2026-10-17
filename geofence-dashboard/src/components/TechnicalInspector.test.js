@@ -142,18 +142,18 @@ describe('TechnicalInspector Component', () => {
       />
     );
 
-    // Switch to Raw Telemetry
-    fireEvent.click(screen.getByRole('tab', { name: /Raw Telemetry/i }));
+    // Switch to Raw Telemetry / Device & Telemetry
+    fireEvent.click(screen.getByRole('tab', { name: /Device & Telemetry/i }));
     expect(screen.getByText(/GPS Coordinate Fix & Accuracy/i)).toBeInTheDocument();
     expect(screen.getByText(/IMU Sensor Readings & Battery/i)).toBeInTheDocument();
 
-    // Switch to Geofence Math Engine
-    fireEvent.click(screen.getByRole('tab', { name: /Geofence Math Engine/i }));
+    // Switch to GPS & Geofence
+    fireEvent.click(screen.getByRole('tab', { name: /GPS & Geofence/i }));
     expect(screen.getByText(/WGS84 Great-Circle Haversine Formula/i)).toBeInTheDocument();
     expect(screen.getByText(/Campus Perimeter/i)).toBeInTheDocument();
 
-    // Switch to Routine Model
-    fireEvent.click(screen.getByRole('tab', { name: /Routine AI Model/i }));
+    // Switch to Routine AI
+    fireEvent.click(screen.getByRole('tab', { name: /Routine AI/i }));
     expect(screen.getByText(/Per-Device Statistical Baseline/i)).toBeInTheDocument();
     expect(screen.getByText(/Daily Learning Timeline Progression/i)).toBeInTheDocument();
     expect(screen.getByText(/Specification & Codebase Reconciliation/i)).toBeInTheDocument();
@@ -165,8 +165,8 @@ describe('TechnicalInspector Component', () => {
     expect(screen.getByText(/Run Preset 2/i)).toBeInTheDocument();
     expect(screen.getByText(/Run Preset 3/i)).toBeInTheDocument();
 
-    // Switch to Diagnostics
-    fireEvent.click(screen.getByRole('tab', { name: /Firebase & Diagnostics/i }));
+    // Switch to Backend & Firebase
+    fireEvent.click(screen.getByRole('tab', { name: /Backend & Firebase/i }));
     expect(screen.getByText(/Firebase Realtime Database & Write API Diagnostics/i)).toBeInTheDocument();
   });
 
@@ -181,7 +181,7 @@ describe('TechnicalInspector Component', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: /Firebase & Diagnostics/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /Backend & Firebase/i }));
 
     // Wait for the probe button to be ready
     await waitFor(() => {

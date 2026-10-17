@@ -665,6 +665,67 @@ What would you like help with?`;
     }
   }, [isOpen]);
 
+  // Mobile detection & virtual keyboard handling via window.visualViewport
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' ? window.innerWidth <= 768 : false
+  );
+  const [viewportHeight, setViewportHeight] = useState(null);
+  const [viewportOffsetTop, setViewportOffsetTop] = useState(0);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(typeof window !== 'undefined' && window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen || typeof window === 'undefined') return;
+
+    const handleViewportChange = () => {
+      if (window.visualViewport) {
+        setViewportHeight(window.visualViewport.height);
+        setViewportOffsetTop(window.visualViewport.offsetTop);
+      }
+    };
+
+    if (window.visualViewport) {
+      handleViewportChange();
+      window.visualViewport.addEventListener('resize', handleViewportChange);
+      window.visualViewport.addEventListener('scroll', handleViewportChange);
+      return () => {
+        window.visualViewport.removeEventListener('resize', handleViewportChange);
+        window.visualViewport.removeEventListener('scroll', handleViewportChange);
+      };
+    }
+  }, [isOpen]);
+
+  // Lock background page scrolling when Taggy is open on mobile
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (isOpen && isMobile) {
+      const origOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = origOverflow || '';
+        document.documentElement.style.overflow = '';
+      };
+    }
+  }, [isOpen, isMobile]);
+
+  // Escape key closes chatbot
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isOpen) {
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
   const handleCopy = (id, text) => {
     // Strip HTML details tags if present for a clean copy
     const cleanText = text.replace(/<details[^>]*>.*?<\/details>/gs, '').trim();
@@ -977,11 +1038,11 @@ Click **Sign In** below to proceed to the caregiver login page.`,
         setIsOpen(false);
       }
 
-      // Smooth scroll to the Technical Inspector drawer or content pane
+      // Smooth scroll inside content pane
       setTimeout(() => {
-        const inspectorEl = document.querySelector('.tech-inspector-drawer') || document.querySelector('.caretag-content-pane');
-        if (inspectorEl) {
-          inspectorEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const pane = document.querySelector('.caretag-content-pane');
+        if (pane) {
+          pane.scrollTo({ top: 0, behavior: 'smooth' });
         }
       }, 120);
     }
@@ -1036,6 +1097,15 @@ Click **Sign In** below to proceed to the caregiver login page.`,
           className={`taggy-chat-window ${isExpanded ? 'taggy-window--expanded' : ''}`}
           role="dialog"
           aria-label="Taggy AI Companion Chat"
+          style={
+            isMobile && viewportHeight
+              ? {
+                  height: `${viewportHeight}px`,
+                  top: `${viewportOffsetTop}px`,
+                  bottom: 'auto'
+                }
+              : undefined
+          }
         >
           {/* Header (Clean, Compact, Brand Navy) */}
           <div className="taggy-chat-header">
@@ -1252,22 +1322,6 @@ Click **Sign In** below to proceed to the caregiver login page.`,
 
           {/* Footer & Anchored Composer (Never Covers Messages) */}
           <div className="taggy-chat-footer">
-            {messages.length > 1 && (
-              <div className="taggy-footer-q-toggle">
-                <button
-                  type="button"
-                  className="taggy-toggle-q-btn"
-                  onClick={() => setShowQuestions(prev => !prev)}
-                  aria-expanded={showQuestions}
-                  aria-controls="taggy-suggestions-region"
-                >
-                  <Sparkles size={11} />
-                  <span>{showQuestions ? 'Hide questions' : 'Show suggested questions'}</span>
-                  <ChevronDown size={11} className={`taggy-chevron ${showQuestions ? 'rotated' : ''}`} />
-                </button>
-              </div>
-            )}
-
             <form
               className="taggy-input-row"
               onSubmit={(e) => {
@@ -1291,7 +1345,7 @@ Click **Sign In** below to proceed to the caregiver login page.`,
                 aria-label="Send message"
                 title="Send"
               >
-                <Send size={13} />
+                <Send size={15} />
               </button>
             </form>
 

@@ -167,6 +167,15 @@ function App() {
     }
   }, [view, session]);
 
+  // Ensure window scroll is always reset to the top when navigating to dashboard
+  useEffect(() => {
+    if (view === 'dashboard' && typeof window !== 'undefined') {
+      window.scrollTo(0, 0);
+      if (document.documentElement) document.documentElement.scrollTop = 0;
+      if (document.body) document.body.scrollTop = 0;
+    }
+  }, [view]);
+
   const handleLaunchDashboard = (targetTab = 'overview') => {
     setDashboardInitialTab(targetTab);
     if (session) {
@@ -208,8 +217,8 @@ function App() {
       window.dispatchEvent(new CustomEvent('caretag:navigate-tab', { detail: 'inspector' }));
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent('caretag:navigate-tab', { detail: 'inspector' }));
-        const el = document.querySelector('.tech-inspector-drawer') || document.querySelector('.caretag-content-pane');
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const pane = document.querySelector('.caretag-content-pane');
+        if (pane) pane.scrollTo({ top: 0, behavior: 'smooth' });
       }, 150);
     }
   };
@@ -406,20 +415,43 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
   const [flyToTarget, setFlyToTarget] = useState(null);
   const [toasts, setToasts] = useState([]);
 
-  // Synchronize activeTab whenever initialTab changes
+  const contentPaneRef = useRef(null);
+
+  // Synchronize activeTab whenever initialTab changes and ensure scroll is reset to top
   useEffect(() => {
     if (initialTab) {
       setShowSetupWizard(false);
       setIsMapExpanded(false);
       setActiveTab(initialTab);
-      if (initialTab === 'inspector') {
-        setTimeout(() => {
-          const el = document.querySelector('.tech-inspector-drawer') || document.querySelector('.caretag-content-pane');
-          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 120);
+      if (contentPaneRef.current) {
+        contentPaneRef.current.scrollTop = 0;
+      }
+      if (typeof window !== 'undefined') {
+        window.scrollTo(0, 0);
+        if (document.documentElement) document.documentElement.scrollTop = 0;
+        if (document.body) document.body.scrollTop = 0;
       }
     }
   }, [initialTab]);
+
+  // Whenever activeTab changes, reset contentPane scroll to top and trigger resize
+  useEffect(() => {
+    if (contentPaneRef.current) {
+      contentPaneRef.current.scrollTop = 0;
+    }
+    if (typeof window !== 'undefined') {
+      window.scrollTo(0, 0);
+      if (document.documentElement) document.documentElement.scrollTop = 0;
+      if (document.body) document.body.scrollTop = 0;
+    }
+    // Invalidate map layout when leaving inspector
+    if (activeTab !== 'inspector') {
+      const timer = setTimeout(() => {
+        if (typeof window !== 'undefined') window.dispatchEvent(new Event('resize'));
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab]);
 
   // Resilient tab and inspector navigation that clears overlaying modals/views
   const handleOpenInspector = useCallback(() => {
@@ -427,8 +459,8 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
     setIsMapExpanded(false);
     setActiveTab('inspector');
     setTimeout(() => {
-      const el = document.querySelector('.tech-inspector-drawer') || document.querySelector('.caretag-content-pane');
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const pane = contentPaneRef.current || document.querySelector('.caretag-content-pane');
+      if (pane) pane.scrollTo({ top: 0, behavior: 'smooth' });
     }, 100);
   }, []);
 
@@ -436,12 +468,10 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
     setShowSetupWizard(false);
     setIsMapExpanded(false);
     setActiveTab(tab);
-    if (tab === 'inspector') {
-      setTimeout(() => {
-        const el = document.querySelector('.tech-inspector-drawer') || document.querySelector('.caretag-content-pane');
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 100);
-    }
+    setTimeout(() => {
+      const pane = contentPaneRef.current || document.querySelector('.caretag-content-pane');
+      if (pane) pane.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 100);
   }, []);
 
   // Listen for global navigation events from chatbot or landing page
@@ -451,12 +481,10 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
         setShowSetupWizard(false);
         setIsMapExpanded(false);
         setActiveTab(e.detail);
-        if (e.detail === 'inspector') {
-          setTimeout(() => {
-            const el = document.querySelector('.tech-inspector-drawer') || document.querySelector('.caretag-content-pane');
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }, 100);
-        }
+        setTimeout(() => {
+          const pane = contentPaneRef.current || document.querySelector('.caretag-content-pane');
+          if (pane) pane.scrollTo({ top: 0, behavior: 'smooth' });
+        }, 100);
       }
     };
     window.addEventListener('caretag:navigate-tab', handleNavEvent);
@@ -581,6 +609,32 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
     setNewChildNameInput('');
     pushToast(`Linked ${res.device.nickname || res.device.deviceKey} successfully!`, 'success');
   };
+
+  // ── Modal Background Scroll Lock & Escape Key Handler ──
+  useEffect(() => {
+    const isAnyModalOpen = showMoreMenu || showLinkDeviceModal || showSetupWizard;
+    if (isAnyModalOpen) {
+      const origOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = origOverflow || '';
+        document.documentElement.style.overflow = '';
+      };
+    }
+  }, [showMoreMenu, showLinkDeviceModal, showSetupWizard]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (showMoreMenu) setShowMoreMenu(false);
+        if (showLinkDeviceModal) setShowLinkDeviceModal(false);
+        if (showSetupWizard) setShowSetupWizard(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showMoreMenu, showLinkDeviceModal, showSetupWizard]);
 
   // ── Multi-Device Geofences Synchronization ──
   useEffect(() => {
@@ -1171,14 +1225,20 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
         </aside>
       )}
 
-      {/* ── Main Workspace: Two-Column Responsive Layout ── */}
-      <main className={`caretag-main-workspace ${isMapExpanded || activeTab === 'map' ? 'caretag-main-workspace--expanded-map' : ''} caretag-main-workspace--tab-${activeTab}`}>
+      {/* ── Main Workspace: Two-Column Responsive Layout / Dedicated Inspector ── */}
+      <main className={`caretag-main-workspace ${isMapExpanded || activeTab === 'map' ? 'caretag-main-workspace--expanded-map' : ''} ${activeTab === 'inspector' ? 'caretag-main-workspace--inspector-active' : ''} caretag-main-workspace--tab-${activeTab}`}>
         
         {/* ── Map Pane (Primary Visual Workspace) ── */}
         <section className="caretag-map-pane" aria-label="Live Geofence Map">
           
           {/* Floating Action Toolbar on Map */}
-          <div className="map-floating-toolbar" role="toolbar" aria-label="Map Controls">
+          <div
+            className="map-floating-toolbar"
+            role="toolbar"
+            aria-label="Map Controls"
+            onPointerDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+          >
             {/* Multi-device map view filter */}
             <div className="map-view-filter-group" role="group" aria-label="Device Map Filter">
               <button
@@ -1528,7 +1588,7 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
         </section>
 
         {/* ── Contextual Content Pane ── */}
-        <section className="caretag-content-pane" aria-label="Dashboard Views">
+        <section className="caretag-content-pane" ref={contentPaneRef} aria-label="Dashboard Views">
           
           {/* Guided Setup Wizard */}
           {showSetupWizard ? (
@@ -1830,6 +1890,23 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
                   <div className="more-action-text">
                     <strong>Technical Inspector</strong>
                     <span>Live telemetry, sensor evaluation, and capstone presets</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className="mobile-more-action-item"
+                  onClick={() => {
+                    setShowMoreMenu(false);
+                    setShowLinkDeviceModal(true);
+                  }}
+                >
+                  <div className="more-action-icon-wrap">
+                    <Radio size={18} className="text-blue" />
+                  </div>
+                  <div className="more-action-text">
+                    <strong>Link Another Smart Band</strong>
+                    <span>Add or pair a new student wearable device</span>
                   </div>
                 </button>
 

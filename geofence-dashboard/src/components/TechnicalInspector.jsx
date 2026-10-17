@@ -85,10 +85,19 @@ export default function TechnicalInspector({
 
   // Synchronized Identity
   const selectedDeviceKey = propDeviceKey || activeProfile?.deviceKey || packet?.deviceKey || 'CARE-TAG-01';
-  const monitoredName = activeProfile?.childName || 'Monitored Profile';
-  const caregiverName = propCaregiverName || 'Caregiver';
+  const monitoredName = activeProfile?.nickname || activeProfile?.name || activeProfile?.childName || 'Leon';
+  const caregiverName = propCaregiverName || 'Bhavishya Singla';
   const isRealHardware = packet?.isHardware && !simRunning && packet?.source !== 'simulation';
-  const modeLabel = simRunning ? 'Demo Simulation' : isRealHardware ? 'Live Device' : 'Live Hardware';
+  const modeLabel = simRunning ? 'Demo Simulation' : isRealHardware ? 'Live Device Data' : 'Live Hardware';
+
+  // Explicit Connection State Separation (Mode !== Connection)
+  const isOffline = !simRunning && (hardwareStatus?.deviceStatus === DEVICE_STATUS.OFFLINE || hardwareStatus?.connected === false);
+  const isStale = !simRunning && hardwareStatus?.deviceStatus === DEVICE_STATUS.STALE;
+  const isLive = !simRunning && (hardwareStatus?.deviceStatus === DEVICE_STATUS.LIVE || (hardwareStatus?.connected === true && !isOffline && !isStale));
+  const isAwaiting = !simRunning && (hardwareStatus?.deviceStatus === DEVICE_STATUS.WAITING_FOR_DATA || hardwareStatus?.deviceStatus === DEVICE_STATUS.CONNECTING);
+
+  const connectionLabel = simRunning ? 'Simulation' : isLive ? 'Connected' : isStale ? 'Delayed' : isAwaiting ? 'Awaiting Heartbeat' : 'Offline';
+  const connectionTagClass = simRunning ? 'conn-tag--sim' : isLive ? 'conn-tag--live' : isStale ? 'conn-tag--stale' : 'conn-tag--offline';
 
   // Last updated timestamp
   const rawTimestamp = packet?.timestamp || packet?.capturedAtUtc || hardwareStatus?.lastVerifiedAt;
@@ -330,72 +339,65 @@ export default function TechnicalInspector({
     ? codeFunctions
     : codeFunctions.filter(f => f.module === filterModule);
 
-  // 8 Structured Primary Sections
+  // 8 Structured Primary Sections with concise labels
   const sectionsList = [
     {
       id: 'overview',
       title: 'Overview',
-      testAlias: 'Overview',
       icon: Activity,
-      statusType: 'live',
+      statusType: isLive ? 'live' : 'neutral',
     },
     {
       id: 'firebase',
       title: 'Backend & Firebase',
-      testAlias: 'Firebase & Diagnostics',
       icon: Database,
       statusType: hardwareStatus?.firebaseConnected !== false ? 'live' : 'error',
     },
     {
       id: 'telemetry',
       title: 'Device & Telemetry',
-      testAlias: 'Raw Telemetry',
       icon: Cpu,
-      statusType: simRunning ? 'sim' : hardwareStatus?.deviceStatus === 'live' ? 'live' : hardwareStatus?.deviceStatus === 'stale' ? 'warn' : 'offline',
+      statusType: simRunning ? 'sim' : isLive ? 'live' : isStale ? 'warn' : 'offline',
     },
     {
       id: 'gps',
       title: 'GPS & Geofence',
-      testAlias: 'Geofence Math Engine',
       icon: Compass,
       statusType: packet?.latitude != null ? 'live' : 'warn',
     },
     {
       id: 'routine',
       title: 'Routine AI',
-      testAlias: 'Routine AI Model',
       icon: Sliders,
       statusType: derivedProfile.hasSufficientHistory ? 'live' : 'warn',
     },
     {
       id: 'alerts',
       title: 'Alerts & Voice',
-      testAlias: 'Alerts & Notifications',
       icon: Bell,
       statusType: 'live',
     },
     {
       id: 'scenarios',
       title: 'Capstone Scenarios',
-      testAlias: 'Capstone Scenarios',
       icon: Zap,
       statusType: simRunning ? 'sim' : 'neutral',
     },
     {
       id: 'reference',
       title: 'Technical Reference',
-      testAlias: 'Judge & Code Guide',
       icon: Award,
-      statusType: 'live',
+      statusType: 'neutral',
     },
   ];
 
   return (
     <div className="tech-inspector-workspace" role="region" aria-label="Technical Inspector">
 
-      {/* ── SECTION 2: SYNCHRONIZED INSPECTOR HEADER ── */}
+      {/* ── SECTION 2: SYNCHRONIZED THREE-ROW INSPECTOR HEADER ── */}
       <header className="inspector-top-header">
-        <div className="inspector-header-row-1">
+        {/* Row A: Page Identity and Row B: Essential Actions */}
+        <div className="inspector-header-row-a">
           <div className="inspector-header-left">
             {onClose && (
               <button
@@ -405,7 +407,7 @@ export default function TechnicalInspector({
                 title="Return to Dashboard"
               >
                 <ArrowLeft size={14} />
-                <span>Dashboard</span>
+                <span>Back to Dashboard</span>
               </button>
             )}
             <div className="inspector-title-group">
@@ -418,7 +420,7 @@ export default function TechnicalInspector({
           </div>
 
           <div className="inspector-header-right">
-            <div className={`inspector-overall-badge ${overallStatusClass}`}>
+            <div className={`inspector-overall-badge ${overallStatusClass}`} title={`Overall System Status: ${overallStatus}`}>
               <span className="overall-dot" />
               <span>{overallStatus}</span>
             </div>
@@ -449,17 +451,18 @@ export default function TechnicalInspector({
                 type="button"
                 className="tech-close-btn"
                 onClick={onClose}
-                aria-label="Close Inspector"
-                title="Close Inspector"
+                aria-label="Exit Inspector"
+                title="Exit Inspector"
               >
                 <X size={15} />
+                <span>Exit</span>
               </button>
             )}
           </div>
         </div>
 
-        {/* Header Row 2: Selected-device identity, Caregiver, Mode, and Timestamp */}
-        <div className="inspector-header-row-2">
+        {/* Row C: Selected Device Context (Explicit Mode vs Connection Distinction) */}
+        <div className="inspector-header-row-c">
           <div className="inspector-device-meta-group">
             <div className="inspector-identity-pill">
               <span className="identity-child-name">{monitoredName}</span>
@@ -467,9 +470,14 @@ export default function TechnicalInspector({
               <code className="identity-device-key">{selectedDeviceKey}</code>
             </div>
 
-            <div className={`inspector-mode-tag ${simRunning ? 'mode--sim' : 'mode--live'}`}>
-              <span className="mode-dot" />
-              <span>{modeLabel}</span>
+            <div className="inspector-mode-tag mode-tag--neutral">
+              <Cpu size={12} />
+              <span>Mode: <strong>{modeLabel}</strong></span>
+            </div>
+
+            <div className={`inspector-conn-tag ${connectionTagClass}`}>
+              <span className="conn-dot" />
+              <span>Connection: <strong>{connectionLabel}</strong></span>
             </div>
 
             <div className="inspector-caregiver-tag">
@@ -480,33 +488,10 @@ export default function TechnicalInspector({
 
           <div className="inspector-time-meta">
             <Clock size={12} />
-            <span>Last updated at {lastUpdatedFormatted}</span>
+            <span>Last updated: <strong>{lastUpdatedFormatted}</strong>{heartbeatAgo !== 'Just now' && heartbeatAgo !== 'Awaiting initial heartbeat' ? ` (${heartbeatAgo})` : ''}</span>
           </div>
         </div>
       </header>
-
-      {/* ── SECTION 3: REORGANIZED 8-SECTION NAVIGATION ── */}
-      <nav className="inspector-category-nav" role="tablist" aria-label="Inspector Categories">
-        {sectionsList.map(sec => {
-          const IconComp = sec.icon;
-          const isActive = activeTab === sec.id || (sec.id === 'reference' && activeTab === 'guide') || (sec.id === 'firebase' && activeTab === 'diagnostics') || (sec.id === 'gps' && activeTab === 'geofence');
-          return (
-            <button
-              key={sec.id}
-              type="button"
-              role="tab"
-              aria-selected={isActive}
-              className={`inspector-nav-pill ${isActive ? 'is-active' : ''}`}
-              onClick={() => setActiveTab(sec.id)}
-            >
-              <IconComp size={13} />
-              <span className="nav-pill-title">{sec.title}</span>
-              <span className="sr-only"> ({sec.testAlias})</span>
-              <span className={`pill-mini-dot dot--${sec.statusType}`} />
-            </button>
-          );
-        })}
-      </nav>
 
       {/* ── PERSISTENT STICKY SCENARIO CONTROL BAR (Section 12) ── */}
       {simRunning && (
@@ -586,8 +571,43 @@ export default function TechnicalInspector({
         </aside>
       )}
 
-      {/* ── MAIN INSPECTOR CONTENT CANVAS ── */}
-      <main className="inspector-detail-canvas">
+      {/* ── INSPECTOR WORKSPACE BODY: DESKTOP SIDEBAR + DETAIL CANVAS ── */}
+      <div className="inspector-layout-body">
+        {/* Navigation Sidebar (Desktop) / Horizontal Segment (Mobile) */}
+        <nav className="inspector-sidebar-nav" role="tablist" aria-label="System Inspector Sections">
+          {sectionsList.map(sec => {
+            const IconComp = sec.icon;
+            const isActive = activeTab === sec.id ||
+              (sec.id === 'reference' && activeTab === 'guide') ||
+              (sec.id === 'firebase' && activeTab === 'diagnostics') ||
+              (sec.id === 'gps' && activeTab === 'geofence');
+            return (
+              <button
+                key={sec.id}
+                type="button"
+                role="tab"
+                id={`inspector-tab-${sec.id}`}
+                aria-selected={isActive}
+                aria-controls={`panel-${sec.id}`}
+                className={`inspector-nav-item ${isActive ? 'is-active' : ''}`}
+                onClick={() => setActiveTab(sec.id)}
+                title={sec.title}
+                data-testid={`inspector-tab-${sec.id}`}
+              >
+                <div className="inspector-nav-item-left">
+                  <IconComp size={15} />
+                  <span className="inspector-nav-label">{sec.title}</span>
+                </div>
+                {sec.statusType && (
+                  <span className={`pill-mini-dot dot--${sec.statusType}`} aria-hidden="true" />
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* ── MAIN INSPECTOR CONTENT CANVAS ── */}
+        <main className="inspector-detail-canvas" id={`panel-${activeTab}`} role="tabpanel" aria-label={activeTab}>
 
         {/* ══════════════════════════════════════════════════════════════
             SECTION A: OVERVIEW (Default screen with 6 health status cards)
@@ -1819,6 +1839,7 @@ Scoring Formula: S_anomaly = w_spatial · S_spatial + w_temporal · S_temporal`}
         )}
 
       </main>
+      </div>
 
     </div>
   );

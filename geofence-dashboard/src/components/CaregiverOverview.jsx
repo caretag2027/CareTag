@@ -422,8 +422,14 @@ export default function CaregiverOverview({
           type="button"
           className="quick-action-pill"
           onClick={() => {
+            const pane = document.querySelector('.caretag-content-pane');
             const el = document.querySelector('.movement-timeline-card');
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            if (pane && el) {
+              const targetTop = el.offsetTop - 12;
+              pane.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
+            } else if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
           }}
           title="Review today's movement history"
         >

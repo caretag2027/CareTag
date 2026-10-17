@@ -140,26 +140,33 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, onOpenInspe
       }
     }
 
-    // 3. Scroll to target element accounting for the floating mobile header
-    const element = document.getElementById(targetId);
-    if (element) {
-      const headerEl = document.querySelector('.floating-header');
-      const headerHeight = headerEl ? headerEl.getBoundingClientRect().height : 56;
-      const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
-      const totalOffset = isMobile ? headerHeight + 16 : headerHeight + 24;
-      const elementPosition = element.getBoundingClientRect().top;
-      const offsetPosition = elementPosition + (window.pageYOffset || document.documentElement.scrollTop || 0) - totalOffset;
+    const scrollToTarget = () => {
+      const element = document.getElementById(targetId);
+      if (element) {
+        const headerEl = document.querySelector('.floating-header');
+        const headerHeight = headerEl ? headerEl.getBoundingClientRect().height : 56;
+        const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+        const totalOffset = isMobile ? headerHeight + 16 : headerHeight + 24;
+        const elementPosition = element.getBoundingClientRect().top;
+        const offsetPosition = elementPosition + (window.pageYOffset || document.documentElement.scrollTop || 0) - totalOffset;
 
-      window.scrollTo({
-        top: Math.max(0, Math.round(offsetPosition)),
-        behavior: 'smooth'
-      });
-    }
+        window.scrollTo({
+          top: Math.max(0, Math.round(offsetPosition)),
+          behavior: 'smooth'
+        });
+      }
+    };
+
+    // 3. Initiate scroll immediately
+    scrollToTarget();
 
     // 4. Close mobile menu AFTER navigation action has been initiated
     requestAnimationFrame(() => {
       setMobileMenuOpen(false);
     });
+
+    // 5. Ensure smooth scroll completes even after mobile menu unmounts and DOM settles
+    setTimeout(scrollToTarget, 80);
   }, []);
 
   // Lock background scroll when mobile menu is open
