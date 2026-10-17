@@ -99,7 +99,7 @@ describe('Mobile-First Responsive UI & UX Specification Tests', () => {
     expect(screen.getByRole('heading', { name: 'Diya Singla' })).toBeInTheDocument();
 
     // Assigned Device Key is displayed in mono badge
-    expect(screen.getByText('CARE-TAG-01')).toBeInTheDocument();
+    expect(screen.getAllByText('CARE-TAG-01').length).toBeGreaterThan(0);
     expect(screen.getByText('CareTag Band S2')).toBeInTheDocument();
     expect(screen.getByText('Daughter')).toBeInTheDocument();
 
@@ -194,9 +194,16 @@ describe('Mobile-First Responsive UI & UX Specification Tests', () => {
     fireEvent.click(alertsBtn);
     expect(handleOpenAlerts).toHaveBeenCalled();
 
-    // Diagnostics action
-    const diagBtn = within(quickActions).getByRole('button', { name: /Diagnostics/i });
-    fireEvent.click(diagBtn);
+    // Movement action
+    const movementBtn = within(quickActions).getByRole('button', { name: /Movement/i });
+    expect(movementBtn).toBeInTheDocument();
+
+    // Diagnostics is NOT in quick actions (Section 4 requirement)
+    expect(within(quickActions).queryByRole('button', { name: /Diagnostics/i })).not.toBeInTheDocument();
+
+    // Inspector is accessible via bottom diagnostics panel (Section 9 requirement)
+    const inspectorBtn = screen.getByRole('button', { name: /Inspector/i });
+    fireEvent.click(inspectorBtn);
     expect(handleOpenInspector).toHaveBeenCalled();
   });
 

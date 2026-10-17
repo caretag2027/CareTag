@@ -14,6 +14,12 @@
 
 import { computeHaversineKm } from './utils/dashboardUtils';
 
+export const DEMO_LOCATIONS = {
+  HOME: { id: 'demo-home', label: 'Demo Home safe zone', centerLatitude: 30.3491, centerLongitude: 76.4117, radiusMeters: 350 },
+  CAMPUS: { id: 'demo-campus', label: 'Thapar Campus', centerLatitude: 30.3555, centerLongitude: 76.4225, radiusMeters: 450 },
+  PARK: { id: 'demo-park', label: 'Demo Park', centerLatitude: 30.3420, centerLongitude: 76.4050, radiusMeters: 300 },
+};
+
 export const SCENARIO_PRESETS = {
   NOMINAL: 'scenario_nominal',
   BREACH: 'scenario_breach',
@@ -23,45 +29,86 @@ export const SCENARIO_PRESETS = {
 export const SCENARIO_METADATA = {
   [SCENARIO_PRESETS.NOMINAL]: {
     id: SCENARIO_PRESETS.NOMINAL,
-    name: '1. Nominal Safety',
-    tag: 'All Normal',
-    description: 'Simulates device safely inside an actively monitored safe place with valid telemetry. No boundary breach or route deviation is flagged.',
-    expectedResult: 'Inside Safe Place · Nominal Safety · Zero Alerts',
+    name: '1. Normal Movement — Inside Safe Zone',
+    tag: 'Normal Movement',
+    description: 'The person follows a familiar route and remains safely inside the configured safe zone.',
+    expectedResult: 'Normal movement is displayed, with no safety alert triggered by the scenario.',
   },
   [SCENARIO_PRESETS.BREACH]: {
     id: SCENARIO_PRESETS.BREACH,
-    name: '2. Boundary Breach',
-    tag: 'Critical Breach',
-    description: 'Simulates device moving beyond the perimeter of an active safe place into unmonitored territory. Evaluates distance against radius and triggers a boundary breach alert.',
-    expectedResult: 'Outside Safe Place · Boundary Breach Event Emitted',
+    name: '2. Safe-Zone Boundary Breach',
+    tag: 'Boundary Breach',
+    description: 'The person starts inside a safe zone and then crosses its configured boundary into unmonitored space.',
+    expectedResult: 'A boundary breach is detected, the event time is displayed, and visual and voice alerts are triggered.',
   },
   [SCENARIO_PRESETS.DEVIATION]: {
     id: SCENARIO_PRESETS.DEVIATION,
-    name: '3. Route Deviation',
-    tag: 'Corridor Deviation',
-    description: 'Simulates device departing from the expected commute route into an unlearned side corridor. Calculates deviation score and triggers a route deviation alert.',
-    expectedResult: 'Deviation Score > 0.65 · Route Deviation Event Emitted',
+    name: '3. Behavioral Route Deviation',
+    tag: 'Route Deviation',
+    description: 'The person begins along a familiar route but deviates from the expected path before leaving a safe zone.',
+    expectedResult: 'The demo displays the route deviation and generates the corresponding behavioral alert when score exceeds threshold.',
   },
 };
+
+function formatSimClock(tick) {
+  const startSeconds = 8 * 3600 + 15 * 60; // 08:15:00 AM
+  const totalSec = startSeconds + tick * 30; // 30 sec per tick
+  const h = String(Math.floor(totalSec / 3600) % 24).padStart(2, '0');
+  const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+  const s = String(totalSec % 60).padStart(2, '0');
+  return `${h}:${m}:${s}`;
+}
+
+// Deterministic waypoint tracks for 100% reproducible capstone demonstrations
+const NOMINAL_WAYPOINTS = [
+  { lat: 30.34910, lon: 76.41170, dev: 0.05, desc: 'Inside Demo Home · Center' },
+  { lat: 30.34940, lon: 76.41210, dev: 0.06, desc: 'Inside Demo Home · North Garden' },
+  { lat: 30.34970, lon: 76.41240, dev: 0.08, desc: 'Inside Demo Home · Walkway' },
+  { lat: 30.34950, lon: 76.41270, dev: 0.07, desc: 'Inside Demo Home · Courtyard' },
+  { lat: 30.34920, lon: 76.41250, dev: 0.06, desc: 'Inside Demo Home · Perimeter Path' },
+  { lat: 30.34910, lon: 76.41190, dev: 0.05, desc: 'Inside Demo Home · Safe Return' },
+];
+
+const BREACH_WAYPOINTS = [
+  { lat: 30.34910, lon: 76.41170, dev: 0.05, isAnomaly: false, desc: 'Inside Demo Home · Starting Position' },
+  { lat: 30.34960, lon: 76.41240, dev: 0.08, isAnomaly: false, desc: 'Inside Demo Home · Approaching East Gate' },
+  { lat: 30.35020, lon: 76.41330, dev: 0.12, isAnomaly: false, desc: 'Inside Demo Home · East Perimeter (180m from center)' },
+  { lat: 30.35080, lon: 76.41420, dev: 0.18, isAnomaly: false, desc: 'Inside Demo Home · Near Boundary (270m from center)' },
+  { lat: 30.35140, lon: 76.41500, dev: 0.25, isAnomaly: false, desc: 'At Boundary Edge (340m / 350m threshold)' },
+  { lat: 30.35240, lon: 76.41620, dev: 0.94, isAnomaly: true, desc: '08:17:30 — Boundary breach detected (left Demo Home)' },
+  { lat: 30.35330, lon: 76.41730, dev: 0.98, isAnomaly: true, desc: 'Outside Safe Zone · Moving eastward' },
+];
+
+const DEVIATION_WAYPOINTS = [
+  { lat: 30.34910, lon: 76.41170, dev: 0.05, isAnomaly: false, desc: 'Demo Home Origin · Familiar corridor' },
+  { lat: 30.35070, lon: 76.41440, dev: 0.08, isAnomaly: false, desc: 'Expected Route · Towards Thapar Campus' },
+  { lat: 30.35230, lon: 76.41710, dev: 0.12, isAnomaly: false, desc: 'Expected Route · Mid-commute corridor' },
+  { lat: 30.35150, lon: 76.41550, dev: 0.42, isAnomaly: false, desc: 'Corridor Variance · Diverging towards Demo Park' },
+  { lat: 30.34800, lon: 76.41100, dev: 0.68, isAnomaly: true, desc: 'Unusual Turn · Deviation score exceeds threshold (0.68 > 0.65)' },
+  { lat: 30.34450, lon: 76.40750, dev: 0.84, isAnomaly: true, desc: '08:17:30 — Route deviation detected (Score: 0.84 > 0.65)' },
+  { lat: 30.34250, lon: 76.40550, dev: 0.89, isAnomaly: true, desc: 'Divergent Corridor · Unlearned path towards Demo Park' },
+];
 
 class GPSSimulation {
   constructor() {
     this.geofences = [];
     this.intervalId = null;
     this.onPacket = null;
+    this.onStateChange = null;
     this.tickCount = 0;
     this.running = false;
+    this.isPaused = false;
     this.activeScenario = null;
     this.simulatedAlerts = [];
     this.currentLat = 30.3491;
     this.currentLon = 76.4117;
-    this.intervalMs = 3000;
+    this.intervalMs = 2500;
   }
 
   /**
    * Start general simulation along configured geofences.
    */
-  start(geofences, onPacket, intervalMs = 3000) {
+  start(geofences, onPacket, intervalMs = 2500) {
     this.stop();
     if (!geofences || geofences.length === 0) return;
 
@@ -70,6 +117,7 @@ class GPSSimulation {
     this.intervalMs = intervalMs;
     this.tickCount = 0;
     this.running = true;
+    this.isPaused = false;
     this.activeScenario = 'commute_general';
 
     this.currentLat = geofences[0].centerLatitude;
@@ -85,6 +133,36 @@ class GPSSimulation {
       this.intervalId = null;
     }
     this.running = false;
+    this.isPaused = false;
+  }
+
+  pause() {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+    this.isPaused = true;
+    if (this.onStateChange) this.onStateChange({ running: this.running, isPaused: this.isPaused });
+  }
+
+  resume() {
+    if (!this.running || !this.isPaused) return;
+    this.isPaused = false;
+    if (this.activeScenario && this.activeScenario.startsWith('scenario_')) {
+      this.intervalId = setInterval(() => this._tickScenario(this.activeScenario), this.intervalMs);
+    } else {
+      this.intervalId = setInterval(() => this._tickGeneral(), this.intervalMs);
+    }
+    if (this.onStateChange) this.onStateChange({ running: this.running, isPaused: this.isPaused });
+  }
+
+  restart() {
+    if (!this.activeScenario) return;
+    const currentScenario = this.activeScenario;
+    const currentGeos = this.geofences;
+    const currentCb = this.onPacket;
+    this.stop();
+    this.startScenario(currentScenario, currentGeos, currentCb);
   }
 
   reset() {
@@ -92,6 +170,7 @@ class GPSSimulation {
     this.activeScenario = null;
     this.simulatedAlerts = [];
     this.tickCount = 0;
+    this.isPaused = false;
     if (this.geofences && this.geofences[0]) {
       this.currentLat = this.geofences[0].centerLatitude;
       this.currentLon = this.geofences[0].centerLongitude;
@@ -111,7 +190,7 @@ class GPSSimulation {
 
   setSpeed(intervalMs) {
     this.intervalMs = intervalMs;
-    if (this.running && this.intervalId) {
+    if (this.running && !this.isPaused && this.intervalId) {
       clearInterval(this.intervalId);
       if (this.activeScenario && this.activeScenario.startsWith('scenario_')) {
         this.intervalId = setInterval(() => this._tickScenario(this.activeScenario), intervalMs);
@@ -132,31 +211,23 @@ class GPSSimulation {
     // Alias scenario_safe to scenario_nominal for backwards compatibility
     const targetScenario = scenarioId === 'scenario_safe' ? SCENARIO_PRESETS.NOMINAL : scenarioId;
 
-    this.geofences = geofences && geofences.length > 0 ? geofences : [
-      { id: 'geo-home', label: 'Home Safe Place', centerLatitude: 30.3491, centerLongitude: 76.4117, radiusMeters: 400 },
-      { id: 'geo-school', label: 'School Campus', centerLatitude: 30.3555, centerLongitude: 76.4225, radiusMeters: 500 }
+    // Use stable demonstration dataset with clearly labelled fictional locations
+    this.geofences = [
+      DEMO_LOCATIONS.HOME,
+      DEMO_LOCATIONS.CAMPUS,
+      DEMO_LOCATIONS.PARK,
     ];
     this.onPacket = onPacket;
     this.activeScenario = targetScenario;
     this.running = true;
+    this.isPaused = false;
     this.tickCount = 0;
 
-    const baseGeo = this.geofences[0];
+    // All scenarios start inside the demo safe place at tick 0
+    this.currentLat = DEMO_LOCATIONS.HOME.centerLatitude;
+    this.currentLon = DEMO_LOCATIONS.HOME.centerLongitude;
 
-    if (targetScenario === SCENARIO_PRESETS.NOMINAL) {
-      this.currentLat = baseGeo.centerLatitude;
-      this.currentLon = baseGeo.centerLongitude;
-    } else if (targetScenario === SCENARIO_PRESETS.DEVIATION) {
-      // Offset from expected corridor
-      this.currentLat = baseGeo.centerLatitude + 0.004;
-      this.currentLon = baseGeo.centerLongitude + 0.005;
-    } else if (targetScenario === SCENARIO_PRESETS.BREACH) {
-      // 1.2km offset outside all safe places
-      this.currentLat = baseGeo.centerLatitude + 0.012;
-      this.currentLon = baseGeo.centerLongitude + 0.015;
-    }
-
-    this.intervalId = setInterval(() => this._tickScenario(targetScenario), 2500);
+    this.intervalId = setInterval(() => this._tickScenario(targetScenario), this.intervalMs);
     this._tickScenario(targetScenario);
   }
 
@@ -175,44 +246,47 @@ class GPSSimulation {
   }
 
   _tickScenario(scenarioId) {
-    this.tickCount++;
-    const baseGeo = this.geofences[0] || { centerLatitude: 30.3491, centerLongitude: 76.4117, radiusMeters: 400, label: 'Home Safe Place' };
+    const baseGeo = DEMO_LOCATIONS.HOME;
+    const simTime = formatSimClock(this.tickCount);
 
     let lat = this.currentLat;
     let lon = this.currentLon;
-    let speed = 3.2;
+    let speed = 3.5;
     let isAnomaly = false;
     let devScore = 0.08;
     let eventType = 'nominal_safety';
     let motionState = 'moving';
+    let phaseDescription = 'Simulating trajectory';
 
     if (scenarioId === SCENARIO_PRESETS.NOMINAL) {
-      // Moving inside safe zone boundary
-      const t = (this.tickCount % 6) / 6;
-      lat = baseGeo.centerLatitude + (Math.sin(t * Math.PI * 2) * 0.001);
-      lon = baseGeo.centerLongitude + (Math.cos(t * Math.PI * 2) * 0.001);
-      devScore = 0.08;
+      const idx = this.tickCount % NOMINAL_WAYPOINTS.length;
+      const wp = NOMINAL_WAYPOINTS[idx];
+      lat = wp.lat;
+      lon = wp.lon;
+      devScore = wp.dev;
       isAnomaly = false;
       eventType = 'nominal_safety';
-      motionState = 'moving';
+      phaseDescription = wp.desc;
     } else if (scenarioId === SCENARIO_PRESETS.BREACH) {
-      // Steps further outside active boundary
-      const progress = Math.min(1.0, this.tickCount * 0.15);
-      lat = baseGeo.centerLatitude + 0.008 + (progress * 0.006);
-      lon = baseGeo.centerLongitude + 0.010 + (progress * 0.008);
-      devScore = 0.92;
-      isAnomaly = true;
-      eventType = 'boundary_breach';
-      motionState = 'moving';
+      const idx = Math.min(this.tickCount, BREACH_WAYPOINTS.length - 1);
+      const wp = BREACH_WAYPOINTS[idx];
+      lat = wp.lat;
+      lon = wp.lon;
+      devScore = wp.dev;
+      isAnomaly = Boolean(wp.isAnomaly);
+      eventType = isAnomaly ? 'boundary_breach' : 'nominal_safety';
+      phaseDescription = wp.desc;
+      speed = isAnomaly ? 4.8 : 3.2;
     } else if (scenarioId === SCENARIO_PRESETS.DEVIATION) {
-      // Diverges perpendicular to expected corridor
-      const progress = this.tickCount * 0.0006;
-      lat = baseGeo.centerLatitude + 0.005 + progress;
-      lon = baseGeo.centerLongitude - 0.004 - progress;
-      devScore = 0.84;
-      isAnomaly = true;
-      eventType = 'route_deviation';
-      motionState = 'moving';
+      const idx = Math.min(this.tickCount, DEVIATION_WAYPOINTS.length - 1);
+      const wp = DEVIATION_WAYPOINTS[idx];
+      lat = wp.lat;
+      lon = wp.lon;
+      devScore = wp.dev;
+      isAnomaly = Boolean(wp.isAnomaly);
+      eventType = isAnomaly ? 'route_deviation' : 'nominal_safety';
+      phaseDescription = wp.desc;
+      speed = 3.8;
     }
 
     this.currentLat = lat;
@@ -231,13 +305,16 @@ class GPSSimulation {
 
     const packet = {
       id: `sim-${scenarioId}-${this.tickCount}`,
-      deviceKey: 'SIM-DEVICE-01',
+      deviceKey: 'DEMO-BAND-01',
       source: 'simulation',
       scenarioId,
       isSimulation: true,
       isHardware: false,
       timestamp: new Date().toISOString(),
       capturedAtUtc: new Date().toISOString(),
+      simClockTime: simTime,
+      phaseDescription,
+      tickCount: this.tickCount,
       latitude: parseFloat(lat.toFixed(6)),
       longitude: parseFloat(lon.toFixed(6)),
       speedKph: parseFloat(speed.toFixed(1)),
@@ -273,6 +350,8 @@ class GPSSimulation {
     if (this.onPacket) {
       this.onPacket(packet);
     }
+
+    this.tickCount++;
   }
 
   _tickGeneral() {

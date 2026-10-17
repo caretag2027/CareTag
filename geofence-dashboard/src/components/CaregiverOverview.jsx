@@ -71,6 +71,7 @@ export default function CaregiverOverview({
   onOpenTechInspector,
 }) {
   const [showDeviceModal, setShowDeviceModal] = useState(false);
+  const [isDiagnosticsExpanded, setIsDiagnosticsExpanded] = useState(false);
   const monitoredName = activeProfile?.childName || 'Monitored Profile';
   const monitoredInitial = (monitoredName.trim().charAt(0) || 'C').toUpperCase();
 
@@ -148,7 +149,7 @@ export default function CaregiverOverview({
   if (!hasValidCoordinates) {
     locationHeading = 'Location Unavailable';
     locationTitle = 'GPS Searching';
-    locationSubtext = 'Waiting for satellite fix from wearable band';
+    locationSubtext = 'Waiting for a location fix from the Smart Band.';
     locationStatusType = 'neutral';
   } else {
     locationHeading = isFixFresh ? 'Current Location' : 'Last Known Location';
@@ -271,11 +272,11 @@ export default function CaregiverOverview({
   return (
     <div className="caregiver-overview">
 
-      {/* ── 1. SELECTED PERSON & DEVICE SELECTOR CARD (Specification Section 6) ── */}
-      <section className="monitored-context-card" aria-label="Monitored Person Context">
+      {/* ── 1. SELECTED PERSON & DEVICE CARD (Section A: Currently monitoring) ── */}
+      <section className="monitored-context-card" aria-label="Currently monitoring">
         <div className="monitored-context-header">
           <div className="monitored-kicker-wrap">
-            <span className="monitored-context-kicker">Currently Monitoring</span>
+            <span className="monitored-context-kicker">Currently monitoring</span>
             <span className="monitored-status-dot dot--active" />
           </div>
           <span className="monitored-caregiver-badge" title={`Signed in as caregiver: ${caregiverName}`}>
@@ -295,28 +296,26 @@ export default function CaregiverOverview({
             <div className="monitored-identity">
               <h2 className="monitored-name">{monitoredName}</h2>
               <p className="monitored-device-meta">
-                <span>{activeProfile?.hardwareModel || 'Smart Band'}</span>
-                <span className="meta-bullet">•</span>
-                <span className="device-id-mono">{selectedDeviceKey}</span>
-                {activeProfile?.relation && (
-                  <>
-                    <span className="meta-bullet">•</span>
-                    <span>{activeProfile.relation}</span>
-                  </>
-                )}
+                <span>{activeProfile?.relation || 'Child'}</span>
+                <span className="meta-bullet">&bull;</span>
+                <strong className="device-id-mono">{selectedDeviceKey}</strong>
+              </p>
+              <p className="monitored-hardware-meta">
+                <span>Device: <span className="hardware-model-val">{activeProfile?.hardwareModel || 'ESP32-S3 + NEO-8M'}</span></span>
               </p>
             </div>
           </div>
 
           <button
             type="button"
-            className="btn-switch-profile"
+            className="btn-switch-profile device-selector-pill"
             onClick={() => setShowDeviceModal(true)}
             aria-haspopup="dialog"
             aria-expanded={showDeviceModal}
             title="Switch monitored person or wearable band"
           >
-            <span>Switch</span>
+            <span className="switch-device-badge">Devices ({devicesList.length})</span>
+            <span className="switch-device-text">Switch device</span>
             <ChevronDown size={14} />
           </button>
         </div>
@@ -360,7 +359,7 @@ export default function CaregiverOverview({
         </aside>
       )}
 
-      {/* ── 2. CAREGIVER QUICK ACTIONS (Specification Section 7) ── */}
+      {/* ── 2. CAREGIVER QUICK ACTIONS (Safe Places, Movement, Alerts) ── */}
       <nav className="dashboard-quick-actions" aria-label="Caregiver Quick Actions">
         <button
           type="button"
@@ -393,22 +392,6 @@ export default function CaregiverOverview({
         >
           <Bell size={13} className={activeAlerts.length > 0 ? 'text-warning' : 'text-teal'} />
           <span>Alerts {activeAlerts.length > 0 ? `(${activeAlerts.length})` : ''}</span>
-        </button>
-
-        <button
-          type="button"
-          className="quick-action-pill"
-          onClick={() => {
-            if (onOpenTechInspector) {
-              onOpenTechInspector();
-            } else {
-              setActiveDrawer('connection');
-            }
-          }}
-          title="Inspect device telemetry and connection"
-        >
-          <Radio size={13} className="text-blue" />
-          <span>Diagnostics</span>
         </button>
       </nav>
 
@@ -445,22 +428,22 @@ export default function CaregiverOverview({
             <strong className="card-main-val bento-card-value">
               {simRunning
                 ? 'Sim Stream Active'
-                : devMeta.isLive
+                : isBandLive
                 ? 'Connected'
-                : devMeta.isStale
-                ? 'Awaiting Heartbeat'
+                : isBandAwaiting
+                ? 'Waiting for data'
                 : hardwareStatus?.deviceStatus === DEVICE_STATUS.CONNECTION_ERROR
                 ? 'Connection Issue'
-                : 'Offline'}
+                : 'Device offline'}
             </strong>
             <p className="card-subtext bento-card-sub">
               {simRunning
                 ? 'Demonstration simulation active'
-                : devMeta.isLive
-                ? `Last update ${hardwareStatus?.formattedAge || 'Just now'}`
-                : hardwareStatus?.formattedAge
-                ? `Last update ${hardwareStatus.formattedAge}`
-                : 'No device heartbeat received'}
+                : isBandLive
+                ? `Last update: ${hardwareStatus?.formattedAge || 'Just now'}`
+                : isBandAwaiting
+                ? 'Awaiting first device telemetry'
+                : 'Waiting for the Smart Band to send an update.'}
             </p>
           </div>
 
@@ -600,32 +583,32 @@ export default function CaregiverOverview({
               <span className="card-kicker bento-card-label">Daily Routine</span>
             </div>
             <span className={`bento-routine-badge ${hasRoutineLearned ? 'badge--learned' : recordedDaysCount > 0 ? 'badge--learning' : 'badge--insufficient'}`}>
-              {hasRoutineLearned ? 'Learned' : recordedDaysCount > 0 ? 'Learning' : 'Insufficient Data'}
+              {hasRoutineLearned ? 'Routine available' : recordedDaysCount > 0 ? 'Learning routine' : 'Insufficient history'}
             </span>
           </div>
 
           <div className="card-body bento-card-body">
             <strong className="card-main-val bento-card-value">
               {hasRoutineLearned
-                ? 'Routine Learned'
+                ? 'Routine Available'
                 : recordedDaysCount > 0
-                ? `Building Routine (${recordedDaysCount}/3 days)`
+                ? `Building a routine (${recordedDaysCount}/3 days)`
                 : 'Insufficient History'}
             </strong>
             <p className="card-subtext bento-card-sub">
               {hasRoutineLearned
                 ? `Usual journey: ${primaryRouteName}`
                 : recordedDaysCount > 0
-                ? `${profile?.totalValidObservations || 0} valid observations recorded`
-                : 'More valid observations needed'}
+                ? `${profile?.totalValidObservations || 0} valid observations recorded so far.`
+                : 'More movement history is needed before reliable routine comparisons are available.'}
             </p>
           </div>
 
           <div className="card-footer bento-card-footer">
             <span className="card-footer-meta bento-stream-tag">
               {hasRoutineLearned
-                ? `Departure: ${profile?.primaryRoute?.departureWindow || '07:40 – 08:00 AM'}`
-                : 'Awaiting 3 commute journeys'}
+                ? 'Corridor active'
+                : `${recordedDaysCount}/3 transit days`}
             </span>
             <span className="card-action-hint bento-action-hint">Routine details &rarr;</span>
           </div>
@@ -665,25 +648,25 @@ export default function CaregiverOverview({
               {tripMode.active
                 ? 'Trip Mode Active'
                 : activeAlerts.length > 0
-                ? 'Active Alerts'
+                ? `${activeAlerts.length} Alert${activeAlerts.length > 1 ? 's' : ''} Need Review`
                 : alertPrefs.deviationAlerts
-                ? 'Monitoring'
-                : 'Muted'}
+                ? 'Monitoring Active'
+                : 'Alerts Paused'}
             </strong>
             <p className="card-subtext bento-card-sub">
               {tripMode.active
-                ? `Expires in ${tripMode.formattedRemaining}`
+                ? `Auto-restores in ${tripMode.formattedRemaining}`
                 : activeAlerts.length > 0
-                ? `${activeAlerts.length} unacknowledged safety alert`
+                ? 'Unacknowledged safety event requires attention.'
                 : alertPrefs.deviationAlerts
-                ? 'Route deviation & perimeter active'
+                ? (isBandLive ? 'Boundary and route monitoring active.' : 'Safety rules ready. Awaiting device update.')
                 : 'Route alerts paused'}
             </p>
           </div>
 
           <div className="card-footer bento-card-footer">
             <span className="card-footer-meta bento-stream-tag">
-              {tripMode.active ? 'Off-route muted' : alertPrefs.voiceAlarms ? 'Voice on' : 'Voice muted'}
+              {tripMode.active ? 'Trip Mode on' : alertPrefs.voiceAlarms ? 'Voice on' : 'Voice muted'}
             </span>
             <span className="card-action-hint bento-action-hint">Manage alerts &rarr;</span>
           </div>
@@ -725,9 +708,9 @@ export default function CaregiverOverview({
           ) : (
             <div className="timeline-empty-box">
               <Footprints size={26} color="#94A3B8" />
-              <p className="empty-title">No movement recorded today yet</p>
+              <strong className="empty-title">No movement recorded today</strong>
               <p className="empty-desc">
-                Stay points and transit corridors will appear here chronologically as the Smart Band transmits location data throughout the day.
+                The movement timeline will appear when the Smart Band provides location data.
               </p>
             </div>
           )}
@@ -754,9 +737,9 @@ export default function CaregiverOverview({
           {geofences.length === 0 ? (
             <div className="safeplaces-empty-box">
               <MapPin size={26} color="#94A3B8" />
-              <p className="empty-title">No safe places configured yet</p>
+              <strong className="empty-title">No safe places yet</strong>
               <p className="empty-desc">
-                Add familiar boundaries like Home or School to enable instant boundary breach alerts when your child departs.
+                Add familiar places such as Home or School to enable boundary alerts.
               </p>
               <button
                 type="button"
@@ -802,78 +785,112 @@ export default function CaregiverOverview({
         </div>
       </section>
 
-      {/* ── ROW 4: SYSTEM HEALTH & DIAGNOSTICS ROW (Full Width) ── */}
-      <section className="dashboard-grid-row diagnostics-row" aria-label="System Connectivity and Health">
-        <div className={`dashboard-panel system-summary-bar ${systemHealthClass}`}>
-          <div className="system-summary-main">
-            <div className="system-summary-header-row">
+      {/* ── ROW 4: SYSTEM STATUS & DIAGNOSTICS (Expandable at bottom) ── */}
+      <section className="dashboard-grid-row diagnostics-row" aria-label="System status and diagnostics">
+        <div className={`dashboard-panel system-diagnostics-panel ${systemHealthClass}`}>
+          {/* Collapsed Bar / Summary Row */}
+          <div className="system-diagnostics-summary-bar">
+            <div className="system-diagnostics-summary-info">
               <div className="system-summary-icon-wrap">
                 {isSystemFullyVerified ? (
-                  <CheckCircle size={18} className="text-success" />
+                  <CheckCircle size={17} className="text-success" />
                 ) : connectionCheck.firebaseOk ? (
-                  <CheckCircle size={18} className="text-teal" />
+                  <CheckCircle size={17} className="text-teal" />
                 ) : (
-                  <AlertTriangle size={18} className="text-warning" />
+                  <AlertTriangle size={17} className="text-warning" />
                 )}
               </div>
-              <div className="system-summary-title-group">
-                <h5 className="system-summary-title">{systemHealthTitle}</h5>
-                <p className="system-summary-subtitle">
-                  Firebase Realtime DB, Smart Band telemetry, and CareTag Safety Engine verified independently.
+              <div className="system-summary-text-block">
+                <div className="system-diagnostics-heading-row">
+                  <span className="system-diagnostics-label">System status and diagnostics</span>
+                  <span className="system-health-pill">{systemHealthTitle}</span>
+                </div>
+                <p className="system-diagnostics-summary-line">
+                  {connectionCheck.firebaseOk ? 'Backend connected' : 'Backend disconnected'} &bull;{' '}
+                  {simRunning ? 'Simulation active' : isBandLive ? 'Smart Band live' : isBandAwaiting ? 'Smart Band awaiting data' : 'Smart Band offline'} &bull;{' '}
+                  {geofences.length > 0 ? `${geofences.length} Safe Places active` : 'Safety engine ready'}
                 </p>
               </div>
             </div>
 
-            <div className="system-summary-pillars">
-              <div className="summary-pillar">
-                <span className={`pillar-dot ${connectionCheck.firebaseOk ? 'dot--green' : 'dot--red'}`} />
-                <span className="pillar-name">Firebase Realtime DB:</span>
-                <strong className="pillar-value">
-                  {connectionCheck.firebaseOk ? `Connected · ${connectionCheck.latencyMs}ms` : 'Disconnected'}
-                </strong>
-              </div>
+            <div className="system-diagnostics-controls">
+              <button
+                type="button"
+                className="btn-test-connections"
+                onClick={handleVerifyConnections}
+                disabled={connectionCheck.testing}
+                title="Execute live connection test across Firebase and telemetry transport"
+              >
+                <RefreshCw size={13} className={connectionCheck.testing ? 'spin' : ''} />
+                <span>{connectionCheck.testing ? 'Testing...' : 'Test Connections'}</span>
+              </button>
 
-              <div className="summary-pillar">
-                <span className={`pillar-dot ${simRunning ? 'dot--blue' : devMeta.isLive ? 'dot--green' : devMeta.isStale ? 'dot--amber' : 'dot--neutral'}`} />
-                <span className="pillar-name">Smart Band Wearable:</span>
-                <strong className="pillar-value">
-                  {simRunning ? 'Simulation Active' : devMeta.isLive ? 'Hardware Streaming Live' : devMeta.isStale ? 'Delayed' : 'Offline / Awaiting Heartbeat'}
-                </strong>
-              </div>
+              {onOpenTechInspector && (
+                <button
+                  type="button"
+                  className="btn-open-inspector-subtle"
+                  onClick={onOpenTechInspector}
+                  title="Open Technical Inspector for comprehensive evaluation"
+                >
+                  <Terminal size={13} />
+                  <span>Inspector</span>
+                </button>
+              )}
 
-              <div className="summary-pillar">
-                <span className={`pillar-dot ${geofences.length > 0 ? 'dot--green' : 'dot--neutral'}`} />
-                <span className="pillar-name">CareTag Safety Engine:</span>
-                <strong className="pillar-value">
-                  {geofences.length > 0 ? `${geofences.length} Places Active` : '0 Places Configured'}
-                </strong>
-              </div>
+              <button
+                type="button"
+                className="btn-toggle-diagnostics"
+                onClick={() => setIsDiagnosticsExpanded(exp => !exp)}
+                aria-expanded={isDiagnosticsExpanded}
+                title={isDiagnosticsExpanded ? 'Collapse diagnostic details' : 'Expand detailed connection diagnostics'}
+              >
+                <span>{isDiagnosticsExpanded ? 'Hide details' : 'Details'}</span>
+                <ChevronDown size={14} className={`diagnostics-chevron ${isDiagnosticsExpanded ? 'chevron--up' : ''}`} />
+              </button>
             </div>
           </div>
 
-          <div className="system-summary-actions">
-            <button
-              type="button"
-              className="btn-test-connections"
-              onClick={handleVerifyConnections}
-              disabled={connectionCheck.testing}
-              title="Execute live connection test across Firebase and telemetry transport"
-            >
-              <RefreshCw size={13} className={connectionCheck.testing ? 'spin' : ''} />
-              <span>{connectionCheck.testing ? 'Testing...' : 'Test Connections'}</span>
-            </button>
-            {onOpenTechInspector && (
-              <button
-                type="button"
-                className="btn-open-inspector-subtle"
-                onClick={onOpenTechInspector}
-                title="Open Technical Inspector for comprehensive evaluation"
-              >
-                <Terminal size={13} />
-                <span>Inspector</span>
-              </button>
-            )}
-          </div>
+          {/* Diagnostics Details Container (expandable) */}
+          <div className={`system-diagnostics-expanded-content ${isDiagnosticsExpanded ? 'is-open' : 'is-collapsed'}`}>
+              <div className="system-summary-pillars">
+                <div className="summary-pillar">
+                  <span className={`pillar-dot ${connectionCheck.firebaseOk ? 'dot--green' : 'dot--red'}`} />
+                  <span className="pillar-name">Firebase Realtime DB:</span>
+                  <strong className="pillar-value">
+                    {connectionCheck.firebaseOk ? `Connected · ${connectionCheck.latencyMs}ms` : 'Disconnected'}
+                  </strong>
+                </div>
+
+                <div className="summary-pillar">
+                  <span className={`pillar-dot ${simRunning ? 'dot--blue' : isBandLive ? 'dot--green' : isBandAwaiting ? 'dot--amber' : 'dot--neutral'}`} />
+                  <span className="pillar-name">Smart Band Wearable:</span>
+                  <strong className="pillar-value">
+                    {simRunning
+                      ? 'Simulation Active'
+                      : isBandLive
+                      ? 'Hardware Streaming Live'
+                      : isBandAwaiting
+                      ? 'Waiting for data'
+                      : 'Offline / Awaiting Heartbeat'}
+                  </strong>
+                </div>
+
+                <div className="summary-pillar">
+                  <span className={`pillar-dot ${geofences.length > 0 ? 'dot--green' : 'dot--neutral'}`} />
+                  <span className="pillar-name">CareTag Safety Engine:</span>
+                  <strong className="pillar-value">
+                    {geofences.length > 0 ? `${geofences.length} Places Active` : '0 Places Configured'}
+                  </strong>
+                </div>
+              </div>
+
+              <div className="diagnostics-subtext-row">
+                <span>Last verified: {connectionCheck.lastChecked || 'On dashboard load'}</span>
+                <span>Active Device: <code className="diagnostics-code">{selectedDeviceKey}</code></span>
+                <span>GPS Telemetry: {hasValidCoordinates ? `${packet?.latitude?.toFixed(4)}, ${packet?.longitude?.toFixed(4)}` : 'Fix Pending'}</span>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
@@ -1253,6 +1270,7 @@ export default function CaregiverOverview({
           className="caretag-modal-overlay"
           role="dialog"
           aria-modal="true"
+          aria-label="Caregiver Authorized Devices"
           aria-labelledby="switch-profile-modal-title"
           onClick={() => setShowDeviceModal(false)}
         >
@@ -1277,52 +1295,78 @@ export default function CaregiverOverview({
 
             <div className="device-sheet-content">
               <p className="device-sheet-subtitle">
-                Caregiver account: <strong>{caregiverName}</strong>. Choose a profile to switch active location, safe boundaries, and alerts.
+                Caregiver account: <strong>{caregiverName}</strong> ({devicesList.length} linked). Choose a device to view location, safe boundaries, and telemetry.
               </p>
 
-              <div className="device-switch-grid" role="radiogroup" aria-label="Available Profiles">
-                {devicesList.map((dev) => {
-                  const isCurrent = dev.deviceKey === selectedDeviceKey;
-                  const initial = (dev.childName?.trim().charAt(0) || 'C').toUpperCase();
+              {devicesList.length === 0 ? (
+                <div className="device-switch-empty">
+                  <p>No Smart Band devices linked to your account yet.</p>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => {
+                      setShowDeviceModal(false);
+                      if (onOpenLinkDevice) onOpenLinkDevice();
+                    }}
+                  >
+                    <Plus size={14} />
+                    <span>Link your first Smart Band</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="device-switch-grid" role="radiogroup" aria-label="Available Profiles">
+                  {devicesList.map((dev) => {
+                    const isCurrent = dev.deviceKey === selectedDeviceKey;
+                    const initial = (dev.childName?.trim().charAt(0) || 'C').toUpperCase();
+                    const statusTag = isCurrent
+                      ? (simRunning || isBandLive ? 'tag--online' : isBandAwaiting ? 'tag--waiting' : 'tag--offline')
+                      : 'tag--standby';
+                    const statusLabel = isCurrent
+                      ? (simRunning ? 'Live Stream' : isBandLive ? 'Connected' : isBandAwaiting ? 'Waiting for data' : 'Offline')
+                      : 'Standby';
 
-                  return (
-                    <button
-                      key={dev.id || dev.deviceKey}
-                      type="button"
-                      role="radio"
-                      aria-checked={isCurrent}
-                      className={`device-switch-row ${isCurrent ? 'is-active-device' : ''}`}
-                      onClick={() => {
-                        if (!isCurrent && onSwitchDevice) {
-                          onSwitchDevice(dev.deviceKey);
-                        }
-                        setShowDeviceModal(false);
-                      }}
-                    >
-                      <div
-                        className="device-row-avatar"
-                        style={{ backgroundColor: dev.avatarColor || '#2563EB' }}
+                    return (
+                      <button
+                        key={dev.id || dev.deviceKey}
+                        type="button"
+                        role="radio"
+                        aria-checked={isCurrent}
+                        className={`device-switch-row ${isCurrent ? 'is-active-device' : ''}`}
+                        onClick={() => {
+                          if (!isCurrent && onSwitchDevice) {
+                            onSwitchDevice(dev.deviceKey);
+                          }
+                          setShowDeviceModal(false);
+                        }}
                       >
-                        <span>{initial}</span>
-                      </div>
-                      <div className="device-row-details">
-                        <strong className="device-row-name">{dev.childName}</strong>
-                        <span className="device-row-sub">
-                          {dev.hardwareModel || 'Smart Band'} &bull; <span className="device-key-badge">{dev.deviceKey}</span> {dev.relation ? `&bull; ${dev.relation}` : ''}
-                        </span>
-                      </div>
-                      {isCurrent ? (
-                        <div className="device-row-checked">
-                          <Check size={14} />
-                          <span>Active</span>
+                        <div
+                          className="device-row-avatar"
+                          style={{ backgroundColor: dev.avatarColor || '#2563EB' }}
+                        >
+                          <span>{initial}</span>
                         </div>
-                      ) : (
-                        <span className="device-row-select-btn">Select</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+                        <div className="device-row-details">
+                          <div className="device-row-top">
+                            <strong className="device-row-name">{dev.childName}</strong>
+                            <span className={`device-row-tag ${statusTag}`}>{statusLabel}</span>
+                          </div>
+                          <span className="device-row-sub">
+                            {dev.hardwareModel || 'Smart Band'} &bull; <span className="device-key-badge">{dev.deviceKey}</span> {dev.relation ? `&bull; ${dev.relation}` : ''}
+                          </span>
+                        </div>
+                        {isCurrent ? (
+                          <div className="device-row-checked">
+                            <Check size={14} />
+                            <span>Active</span>
+                          </div>
+                        ) : (
+                          <span className="device-row-select-btn">Select</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               <div className="device-sheet-actions">
                 <button
@@ -1334,7 +1378,7 @@ export default function CaregiverOverview({
                   }}
                 >
                   <Plus size={15} />
-                  <span>Link Another Smart Band</span>
+                  <span>Link another Smart Band device to this account</span>
                 </button>
               </div>
             </div>

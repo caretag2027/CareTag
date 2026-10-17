@@ -12,7 +12,7 @@
  *   - Browser autoplay policy handled gracefully
  */
 
-const COOLDOWN_MS = 30000; // 30 seconds between same alert type
+const COOLDOWN_MS = 60000; // 60 seconds between same alert type / event to avoid spam
 const SETTING_KEY = 'caretag.voiceAlarm.enabled';
 
 class VoiceAlarm {
@@ -134,41 +134,74 @@ class VoiceAlarm {
 
   /**
    * Trigger a voice alarm for an alert event.
-   * @param {string} type — 'out_of_zone' | 'anomaly' | 'low_battery'
-   * @param {{ nearestGeofence?: string, distance?: number, deviationScore?: number, batteryPercent?: number }} details
+   * @param {string} type — 'out_of_zone' | 'boundary_breach' | 'anomaly' | 'route_deviation' | 'low_battery'
+   * @param {{ childName?: string, alertId?: string, nearestGeofence?: string, distance?: number, deviationScore?: number, batteryPercent?: number }} details
    */
   trigger(type, details = {}) {
     if (!this.enabled) return false;
-    if (!this._canAlert(type)) return false;
+    const dedupeKey = details.alertId ? `${type}_${details.alertId}` : type;
+    if (!this._canAlert(dedupeKey)) return false;
 
+    const child = details.childName?.trim() || 'Your child';
     let message = '';
 
     switch (type) {
       case 'out_of_zone':
-        message = `Warning. Device has left the safety zone.`;
-        if (details.nearestGeofence) {
-          message += ` Currently ${details.distance?.toFixed(1) || 'unknown'} kilometers from ${details.nearestGeofence}.`;
+      case 'boundary_breach':
+      case 'breach':
+        if (details.customMessage) {
+          message = details.customMessage;
+        } else if (details.nearestGeofence) {
+          const zoneText = details.nearestGeofence.toLowerCase().startsWith('the ')
+            ? details.nearestGeofence
+            : `the ${details.nearestGeofence}`;
+          message = `CareTag alert. ${child} has left ${zoneText}.`;
+        } else {
+          message = `CareTag alert. ${child} has left a configured safe place.`;
         }
         break;
 
       case 'anomaly':
-        message = `Anomaly detected. Deviation score ${details.deviationScore?.toFixed(2) || 'high'}.`;
-        if (details.nearestGeofence) {
-          message += ` Nearest zone: ${details.nearestGeofence}.`;
+      case 'route_deviation':
+        if (details.customMessage) {
+          message = details.customMessage;
+        } else if (details.routeName) {
+          message = `CareTag alert. An unusual movement pattern has been detected on the ${details.routeName} route.`;
+        } else {
+          message = `CareTag alert. ${child} has deviated from the learned routine.`;
+          if (details.nearestGeofence) {
+            message += ` Near ${details.nearestGeofence}.`;
+          }
         }
         break;
 
       case 'low_battery':
-        message = `Low battery warning. Battery at ${details.batteryPercent || 'critical'} percent.`;
+        message = `CareTag notice. Smart Band battery is low at ${details.batteryPercent || 20} percent.`;
         break;
 
       default:
-        message = `Safety alert triggered.`;
+        message = details.customMessage || `CareTag notice. A safety notification was recorded for ${child}.`;
     }
 
     this._speak(message);
-    this._recordAlert(type);
+    this._recordAlert(dedupeKey);
     return true;
+  }
+
+  /**
+   * Speak arbitrary text directly (e.g. for testing audio permissions)
+   */
+  speak(text) {
+    if (!this.enabled) return false;
+    this._speak(text);
+    return true;
+  }
+
+  /**
+   * Test speech synthesis output to verify browser audio permissions
+   */
+  testVoice() {
+    return this.speak('CareTag voice alert system active. Audio synthesis verified.');
   }
 
   /**

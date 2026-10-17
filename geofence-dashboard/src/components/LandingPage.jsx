@@ -4,6 +4,7 @@ import {
   ShieldAlert, Sparkles, Menu, X
 } from 'lucide-react';
 import taggyImg from '../assets/taggy.png';
+import dashboardPreview3d from '../assets/dashboard-preview-3d.png';
 import CareTagLogo from './CareTagLogo';
 import HeroRoutineSimulation from './HeroRoutineSimulation';
 
@@ -360,9 +361,9 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
             <button
               type="button"
               className="btn-hero-secondary"
-              onClick={() => handleNavClick('routine-demo')}
+              onClick={() => handleNavClick('how-it-works')}
             >
-              <span>See how it works &darr;</span>
+              <span>See how it works</span>
             </button>
           </div>
         </div>
@@ -371,29 +372,8 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
       {/* ── 3. Visual 4-Day Routine Awareness Demonstration (Home ↔ School) ── */}
       <section id="routine-demo" className="routine-demo-section">
         <div className="section-container">
-          <div className="section-header text-center">
-            <div className="section-eyebrow-pill">
-              <Activity size={13} />
-              <span>INTERACTIVE DEMO</span>
-            </div>
-            <h2 className="section-title">See how a routine becomes familiar.</h2>
-            <p className="section-lead">
-              Explore how CareTag compares a usual route with an unexpected change.
-            </p>
-          </div>
-
           <div className="showcase-demo-wrapper">
             <div className="showcase-demo-frame">
-              <div className="showcase-demo-header-bar">
-                <div className="showcase-demo-tag">
-                  <span className="showcase-pulse-dot" />
-                  <span>Routine-Learning Model &bull; Interactive 4-Day Simulation</span>
-                </div>
-                <div className="showcase-demo-badge">
-                  <span>Interactive Prototype</span>
-                </div>
-              </div>
-
               {/* 4-Day Interactive Simulation */}
               <HeroRoutineSimulation />
             </div>
@@ -541,7 +521,7 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
                 onClick={() => window.dispatchEvent(new CustomEvent('caretag:open-taggy'))}
                 title="Ask Taggy a question"
               >
-                <Sparkles size={14} />
+                <Sparkles size={14} className="taggy-btn-icon" />
                 <span>Ask Taggy a question</span>
                 <ArrowRight size={14} />
               </button>
@@ -598,7 +578,7 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
           </div>
 
           <div className="team-mentor-wrap">
-            <div className="team-mentor-pill">
+            <div className="team-mentor-card">
               <span className="team-mentor-badge">Faculty Mentors</span>
               <span className="team-mentor-text">
                 <strong>Dr. Kapil Tomar</strong> &amp; <strong>Dr. Ravindra Kumar</strong>, Associate Professors, CSED
@@ -641,7 +621,7 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
             </div>
 
             <div className="final-cta-right" aria-hidden="true">
-              <div className="preview-product-card">
+              <div className="preview-product-card preview-product-card--3d">
                 <div className="preview-card-header">
                   <div className="preview-card-dots">
                     <span className="dot dot-red" />
@@ -652,20 +632,12 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
                   <span className="preview-status-pill">Interactive Demo</span>
                 </div>
                 <div className="preview-card-body">
-                  <div className="preview-map-mock">
-                    <div className="preview-zone zone-home">
-                      <span className="preview-zone-dot" />
-                      <span>Home</span>
-                    </div>
-                    <div className="preview-corridor" />
-                    <div className="preview-zone zone-school">
-                      <span className="preview-zone-dot" />
-                      <span>School</span>
-                    </div>
-                    <div className="preview-device-pin">
-                      <span className="pin-pulse" />
-                      <span className="pin-core" />
-                    </div>
+                  <div className="preview-3d-mock-wrap">
+                    <img
+                      src={dashboardPreview3d}
+                      alt="CareTag routine monitoring dashboard preview"
+                      className="preview-3d-img"
+                    />
                   </div>
                   <div className="preview-telemetry-row">
                     <div className="preview-chip">

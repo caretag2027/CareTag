@@ -49,18 +49,60 @@ describe('TechnicalInspector Component', () => {
     }
   ];
 
-  test('renders Judge & Code Guide tab by default with Capstone Pitch and Evaluator protocol', () => {
+  const mockActiveProfile = {
+    deviceKey: 'CARE-TAG-01',
+    childName: 'Diya Singla',
+    relation: 'Child',
+  };
+
+  test('renders Overview tab by default with synchronized identity and 6 status cards', () => {
     render(
       <TechnicalInspector
         packet={mockPacket}
         geofences={mockGeofences}
         hardwareStatus={{ connected: true, deviceStatus: 'live' }}
         simRunning={false}
+        selectedDeviceKey="CARE-TAG-01"
+        activeProfile={mockActiveProfile}
+        caregiverName="Bhavishya Singla"
+      />
+    );
+
+    // Title and subtitle
+    expect(screen.getByText(/System Inspector/i)).toBeInTheDocument();
+    expect(screen.getByText(/Device health, location diagnostics and safety verification/i)).toBeInTheDocument();
+
+    // Synchronized identity
+    expect(screen.getAllByText(/Diya Singla/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/CARE-TAG-01/i)[0]).toBeInTheDocument();
+    expect(screen.getByText(/Bhavishya Singla/i)).toBeInTheDocument();
+    expect(screen.getByText(/Live Device/i)).toBeInTheDocument();
+
+    // 6 Status cards on Overview
+    expect(screen.getAllByText(/Backend & Firebase/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/Smart Band Connection/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/GPS & Location/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/Routine AI Readiness/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/CareTag Safety Engine/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/Alerts & Voice/i)[0]).toBeInTheDocument();
+  });
+
+  test('renders Technical Reference (Judge & Code Guide) tab with pitch, protocol, and verified architecture', () => {
+    render(
+      <TechnicalInspector
+        packet={mockPacket}
+        geofences={mockGeofences}
+        hardwareStatus={{ connected: true, deviceStatus: 'live' }}
+        simRunning={false}
+        initialTab="reference"
       />
     );
 
     expect(screen.getByText(/Capstone Presentation Guide/i)).toBeInTheDocument();
     expect(screen.getByText(/CareTag: Standalone Intelligent Wearable Safety System/i)).toBeInTheDocument();
+    expect(screen.getByText(/CareTag Edge-Cloud Architecture/i)).toBeInTheDocument();
+    // Verify "Patent Pending" claim was removed as requested
+    expect(screen.queryByText(/Patent Pending/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Evaluator Live Review & Verification Protocol/i)).toBeInTheDocument();
     expect(screen.getByText(/Codebase Architecture & Function Directory/i)).toBeInTheDocument();
   });
@@ -72,6 +114,7 @@ describe('TechnicalInspector Component', () => {
         geofences={mockGeofences}
         hardwareStatus={{ connected: true, deviceStatus: 'live' }}
         simRunning={false}
+        initialTab="reference"
       />
     );
 
@@ -113,16 +156,18 @@ describe('TechnicalInspector Component', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Routine AI Model/i }));
     expect(screen.getByText(/Per-Device Statistical Baseline/i)).toBeInTheDocument();
     expect(screen.getByText(/Daily Learning Timeline Progression/i)).toBeInTheDocument();
+    expect(screen.getByText(/Specification & Codebase Reconciliation/i)).toBeInTheDocument();
 
     // Switch to Scenarios
     fireEvent.click(screen.getByRole('tab', { name: /Capstone Scenarios/i }));
     expect(screen.getByText(/Strict Simulation Isolation/i)).toBeInTheDocument();
     expect(screen.getByText(/Run Preset 1/i)).toBeInTheDocument();
     expect(screen.getByText(/Run Preset 2/i)).toBeInTheDocument();
+    expect(screen.getByText(/Run Preset 3/i)).toBeInTheDocument();
 
     // Switch to Diagnostics
     fireEvent.click(screen.getByRole('tab', { name: /Firebase & Diagnostics/i }));
-    expect(screen.getByText(/Firebase Realtime Database.*Diagnostics/i)).toBeInTheDocument();
+    expect(screen.getByText(/Firebase Realtime Database & Write API Diagnostics/i)).toBeInTheDocument();
   });
 
   test('executes diagnostics probe when button is clicked', async () => {
@@ -138,7 +183,7 @@ describe('TechnicalInspector Component', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Firebase & Diagnostics/i }));
 
-    // Wait for the automatic initial probe to complete
+    // Wait for the probe button to be ready
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /Run Diagnostics Probe/i })).toBeInTheDocument();
     });
@@ -165,5 +210,34 @@ describe('TechnicalInspector Component', () => {
     expect(screen.getByText(/Write & REST APIs/i)).toBeInTheDocument();
     expect(screen.getByText(/Write, PATCH & DELETE Active/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Test Connections & APIs/i })).toBeInTheDocument();
+  });
+
+  test('renders persistent sticky control bar with simulation clock when demo simulation is running', () => {
+    const simPacket = {
+      ...mockPacket,
+      isSimulation: true,
+      simClockTime: '08:17:30',
+      phaseDescription: 'Boundary breach detected (left Demo Home)',
+    };
+
+    render(
+      <TechnicalInspector
+        packet={simPacket}
+        geofences={mockGeofences}
+        hardwareStatus={{ connected: true, deviceStatus: 'live' }}
+        simRunning={true}
+        activeScenario="scenario_breach"
+        selectedDeviceKey="DEMO-BAND-01"
+      />
+    );
+
+    // Verify Demo Simulation mode tag
+    expect(screen.getAllByText(/Demo Simulation/i)[0]).toBeInTheDocument();
+
+    // Verify Sticky scenario control bar is visible
+    expect(screen.getByRole('complementary', { name: /Simulation Controls/i })).toBeInTheDocument();
+    expect(screen.getByText(/08:17:30/i)).toBeInTheDocument();
+    expect(screen.getByText(/Boundary breach detected/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Stop Scenario/i })).toBeInTheDocument();
   });
 });

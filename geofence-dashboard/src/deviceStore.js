@@ -52,7 +52,7 @@ export function loadUserDevices(userId) {
   try {
     const key = userKey(userId, 'devices');
     const stored = JSON.parse(localStorage.getItem(key));
-    if (Array.isArray(stored) && stored.length > 0) {
+    if (Array.isArray(stored)) {
       return stored;
     }
   } catch {}

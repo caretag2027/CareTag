@@ -32,6 +32,7 @@ import FirstTimeSetupWizard from './components/FirstTimeSetupWizard';
 import CaregiverOverview from './components/CaregiverOverview';
 import TechnicalInspector from './components/TechnicalInspector';
 import SafeZoneManager from './components/SafeZoneManager';
+import voiceAlarm from './voiceAlarm';
 import {
   getDeviceStatusMeta,
   DEVICE_STATUS,
@@ -273,11 +274,10 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
   // ── Multi-Device & Profile Management ──
   const [devicesList, setDevicesList] = useState(() => deviceStore.loadUserDevices(userId));
   const [selectedDeviceKey, setSelectedDeviceKey] = useState(() => deviceStore.getActiveDeviceKey(userId, session.deviceKey || 'CARE-TAG-01'));
-  const [isPersonMenuOpen, setIsPersonMenuOpen] = useState(false);
   const [isDeviceMenuOpen, setIsDeviceMenuOpen] = useState(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
-  const personMenuRef = useRef(null);
   const deviceMenuRef = useRef(null);
+  const mobileDeviceMenuRef = useRef(null);
   const accountMenuRef = useRef(null);
   const [showLinkDeviceModal, setShowLinkDeviceModal] = useState(false);
   const [newDeviceKeyInput, setNewDeviceKeyInput] = useState('');
@@ -289,10 +289,10 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
   // Close menus on outside click or Escape key
   useEffect(() => {
     function handleClickOutside(e) {
-      if (personMenuRef.current && !personMenuRef.current.contains(e.target)) {
-        setIsPersonMenuOpen(false);
-      }
-      if (deviceMenuRef.current && !deviceMenuRef.current.contains(e.target)) {
+      if (
+        deviceMenuRef.current && !deviceMenuRef.current.contains(e.target) &&
+        (!mobileDeviceMenuRef.current || !mobileDeviceMenuRef.current.contains(e.target))
+      ) {
         setIsDeviceMenuOpen(false);
       }
       if (accountMenuRef.current && !accountMenuRef.current.contains(e.target)) {
@@ -301,7 +301,6 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
     }
     function handleKeyDown(e) {
       if (e.key === 'Escape') {
-        setIsPersonMenuOpen(false);
         setIsDeviceMenuOpen(false);
         setIsAccountMenuOpen(false);
       }
@@ -323,34 +322,14 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
     hardwareModel: 'ESP32 Smart Band',
   };
   const monitoredName = activeProfile.childName;
-  const monitoredInitial = (monitoredName.trim().charAt(0) || 'C').toUpperCase();
   const deviceDisplayName = `${monitoredName.split(' ')[0]}'s Smart Band (${selectedDeviceKey})`;
 
-  // Distinct monitored people (Caregiver -> Monitored Person -> Linked Devices hierarchy)
-  const distinctPersons = React.useMemo(() => {
-    const seen = new Set();
-    const list = [];
-    for (const dev of devicesList) {
-      const key = (dev.childName || '').trim().toLowerCase();
-      if (key && !seen.has(key)) {
-        seen.add(key);
-        list.push(dev);
-      }
-    }
-    return list;
-  }, [devicesList]);
-
-  // Devices specifically linked to the currently selected person
-  const linkedDevicesForPerson = React.useMemo(() => {
-    const currentName = (monitoredName || '').trim().toLowerCase();
-    return devicesList.filter(d => (d.childName || '').trim().toLowerCase() === currentName);
-  }, [devicesList, monitoredName]);
-
   // Caregiver display identity
+  // Authenticated caregiver is presented as "Caregiver" (removing the "Administrator" label from display)
   const caregiverName = session?.name || session?.email?.split('@')[0] || 'Caregiver';
   const caregiverInitial = (caregiverName.trim().charAt(0) || 'C').toUpperCase();
-  const caregiverRoleLabel = session?.role === 'admin'
-    ? 'Administrator'
+  const caregiverRoleLabel = (session?.role === 'admin' || session?.role === 'caregiver')
+    ? 'Caregiver'
     : session?.role === 'guardian'
     ? 'Family Guardian'
     : 'Caregiver';
@@ -395,6 +374,7 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
 
   // ── Simulation state ──
   const [simRunning, setSimRunning] = useState(false);
+  const [isSimPaused, setIsSimPaused] = useState(false);
   const [activeScenario, setActiveScenario] = useState(null);
   const [simulatedAlerts, setSimulatedAlerts] = useState([]);
 
@@ -526,6 +506,11 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
     loadData(selectedDeviceKey);
   }, [loadData, selectedDeviceKey]);
 
+  // Synchronize alerts and badge counts whenever device key changes
+  useEffect(() => {
+    refreshAlerts();
+  }, [refreshAlerts]);
+
   // ── Device Switch Handler with Clean State Isolation ──
   const handleSwitchDevice = useCallback((newKey) => {
     if (newKey === selectedDeviceKey) {
@@ -547,22 +532,17 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
       batteryPercent: 92,
       deviceStatus: DEVICE_STATUS.CONNECTING,
     });
+    // Immediately isolate alerts and trip mode to newly selected device
+    setAlerts(alertStore.loadDeviceAlerts(userId, newKey));
+    setUnackCount(alertStore.getUnacknowledgedCount(userId));
+    setTripModeState(alertStore.getTripMode(userId, newKey));
     setSelectedDeviceKey(newKey);
     deviceStore.setActiveDeviceKey(userId, newKey);
     setIsDeviceMenuOpen(false);
-    setIsPersonMenuOpen(false);
-    pushToast(`Switched active profile to ${newKey}`, 'info');
-  }, [selectedDeviceKey, userId, pushToast]);
-
-  // ── Switch Monitored Person Handler ──
-  const handleSelectPerson = useCallback((person) => {
-    const targetDevice = devicesList.find(d => (d.childName || '').trim().toLowerCase() === (person.childName || '').trim().toLowerCase());
-    if (targetDevice) {
-      handleSwitchDevice(targetDevice.deviceKey);
-      pushToast(`Monitoring ${person.childName}`, 'info');
-    }
-    setIsPersonMenuOpen(false);
-  }, [devicesList, handleSwitchDevice, pushToast]);
+    const targetDev = devicesList.find(d => d.deviceKey === newKey);
+    const targetName = targetDev ? targetDev.childName : newKey;
+    pushToast(`Switched active device to ${newKey} (${targetName})`, 'info');
+  }, [selectedDeviceKey, userId, devicesList, pushToast]);
 
   // ── Link New Device Handler ──
   const handleLinkDeviceSubmit = (e) => {
@@ -715,6 +695,7 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
   const handleStartScenario = (scenarioId) => {
     setIsLiveHardwareMode(false);
     setSimRunning(true);
+    setIsSimPaused(false);
     setActiveScenario(scenarioId);
 
     const scenarioMeta = SCENARIO_PRESETS[scenarioId] || scenarioId;
@@ -734,6 +715,7 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
             latitude: simPacket.latitude,
             longitude: simPacket.longitude,
             nearestGeofence: simPacket.nearestGeofence,
+            simClockTime: simPacket.simClockTime || '08:17:30',
             message: simPacket.eventType === 'boundary_breach'
               ? `Simulated boundary breach: device stepped outside "${simPacket.nearestGeofence}"`
               : 'Simulated route deviation: device departed from learned corridor',
@@ -742,13 +724,50 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
           },
           ...prev.slice(0, 19)
         ]);
+
+        // Voice alert dispatch (deduplicated by event type & alert ID)
+        if (simPacket.eventType === 'boundary_breach') {
+          voiceAlarm.trigger('boundary_breach', {
+            childName: 'The monitored person',
+            nearestGeofence: 'Demo Home safe zone',
+            customMessage: 'CareTag alert. The monitored person has left the Demo Home safe zone.',
+            alertId: `sim-breach-${simPacket.id}`,
+          });
+        } else if (simPacket.eventType === 'route_deviation') {
+          voiceAlarm.trigger('route_deviation', {
+            childName: 'The monitored person',
+            routeName: 'Demo Campus',
+            customMessage: 'CareTag alert. An unusual movement pattern has been detected on the Demo Campus route.',
+            alertId: `sim-deviation-${simPacket.id}`,
+          });
+        }
       }
     });
+  };
+
+  const handlePauseScenario = () => {
+    simulation.pause();
+    setIsSimPaused(true);
+    pushToast('Simulation paused.', 'info');
+  };
+
+  const handleResumeScenario = () => {
+    simulation.resume();
+    setIsSimPaused(false);
+    pushToast('Simulation resumed.', 'info');
+  };
+
+  const handleRestartScenario = () => {
+    if (!activeScenario) return;
+    setIsSimPaused(false);
+    handleStartScenario(activeScenario);
+    pushToast('Simulation restarted from origin.', 'info');
   };
 
   const handleStopScenario = () => {
     simulation.stop();
     setSimRunning(false);
+    setIsSimPaused(false);
     setActiveScenario(null);
     setIsLiveHardwareMode(true);
     pushToast('Simulation stopped. Resumed live hardware telemetry.', 'info');
@@ -757,6 +776,7 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
   const handleResetScenario = () => {
     simulation.reset();
     setSimRunning(false);
+    setIsSimPaused(false);
     setActiveScenario(null);
     setSimulatedAlerts([]);
     setIsLiveHardwareMode(true);
@@ -867,193 +887,158 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
   // Active top alert (only non-nominal)
   const topAlert = alerts.find(a => !a.acknowledged && a.type !== 'nominal_safety');
 
+  // Hardware status metadata & connection indicators for the active device
+  const activeDevMeta = getDeviceStatusMeta(hardwareStatus?.deviceStatus, hardwareStatus?.ageSeconds);
+  const isOnline = simRunning || activeDevMeta.isLive;
+  const isAwaiting = !simRunning && (hardwareStatus?.deviceStatus === DEVICE_STATUS.WAITING_FOR_DATA || hardwareStatus?.deviceStatus === DEVICE_STATUS.CONNECTING);
+  const isStale = !simRunning && activeDevMeta.isStale;
+  const isError = !simRunning && hardwareStatus?.deviceStatus === DEVICE_STATUS.CONNECTION_ERROR;
+  const isGpsSearching = isOnline && (!latest?.lat || !latest?.lng);
+
+  const activeStatusLabel = simRunning
+    ? 'Simulation Active'
+    : isGpsSearching
+    ? 'GPS Searching'
+    : isOnline
+    ? 'Connected'
+    : isAwaiting
+    ? 'Waiting for data'
+    : isStale
+    ? (hardwareStatus?.ageSeconds != null ? `Delayed (${hardwareStatus.ageSeconds}s)` : 'Delayed')
+    : isError
+    ? 'Connection issue'
+    : 'Offline';
+
+  const activeStatusDotClass = simRunning || isOnline
+    ? (isGpsSearching ? 'status-dot--yellow' : 'status-dot--green')
+    : isAwaiting || isStale
+    ? 'status-dot--yellow'
+    : isError
+    ? 'status-dot--red'
+    : 'status-dot--neutral';
+
+  const activeStatusBadgeClass = simRunning
+    ? 'live-source-badge--sim'
+    : isOnline
+    ? 'live-source-badge--hw'
+    : isStale
+    ? 'live-source-badge--stale'
+    : isError
+    ? 'live-source-badge--error'
+    : 'live-source-badge--offline';
+
+  // Render device selector dropdown (shared for desktop and mobile)
+  const renderDeviceDropdown = (isMobile = false) => (
+    <div
+      className={`device-dropdown ${isMobile ? 'device-dropdown--mobile' : ''}`}
+      role="menu"
+      aria-label="Caregiver Authorized Devices"
+    >
+      <div className="device-dropdown-header">
+        <div className="device-dropdown-header-row">
+          <span className="device-dropdown-title">Authorized Devices</span>
+          <span className="device-dropdown-count-pill">{`${devicesList.length} total`}</span>
+        </div>
+        <span className="device-dropdown-sub">Linked wearables paired with your caregiver account</span>
+      </div>
+
+      <div className="device-dropdown-list">
+        {devicesList.length === 0 ? (
+          <div className="device-dropdown-empty">
+            <p>No devices linked to your account yet.</p>
+            <button
+              type="button"
+              className="btn-dropdown-link-new"
+              onClick={() => {
+                setIsDeviceMenuOpen(false);
+                setNewChildNameInput('');
+                setShowLinkDeviceModal(true);
+              }}
+            >
+              <Plus size={13} />
+              <span>Link your first Smart Band</span>
+            </button>
+          </div>
+        ) : (
+          devicesList.map(dev => {
+            const isSelected = dev.deviceKey === selectedDeviceKey;
+            const statusText = isSelected ? activeStatusLabel : 'Standby';
+            const tagClass = isSelected
+              ? (simRunning || isOnline ? 'tag--online' : isAwaiting || isStale ? 'tag--waiting' : 'tag--offline')
+              : 'tag--standby';
+            const avatarColor = dev.avatarColor || '#2563EB';
+            const initial = (dev.childName?.trim().charAt(0) || 'C').toUpperCase();
+
+            return (
+              <button
+                key={dev.id || dev.deviceKey}
+                type="button"
+                className={`device-dropdown-item ${isSelected ? 'is-selected' : ''}`}
+                onClick={() => handleSwitchDevice(dev.deviceKey)}
+                role="menuitem"
+                aria-current={isSelected ? 'true' : undefined}
+              >
+                <div className="device-item-avatar" style={{ backgroundColor: avatarColor }}>
+                  <span>{initial}</span>
+                </div>
+                <div className="device-item-details">
+                  <div className="device-item-top">
+                    <strong className="device-item-key">{dev.deviceKey}</strong>
+                    <span className="device-item-person">{dev.childName}</span>
+                    <span className={`device-item-badge ${tagClass}`}>{statusText}</span>
+                  </div>
+                  <div className="device-item-meta">
+                    <span>{dev.relation || 'Child'} {dev.age ? `· Age ${dev.age}` : ''}</span>
+                    <span className="meta-bullet">•</span>
+                    <span>{dev.hardwareModel || 'Smart Band'}</span>
+                  </div>
+                </div>
+                {isSelected && <Check size={16} className="text-teal item-check" />}
+              </button>
+            );
+          })
+        )}
+      </div>
+
+      <div className="device-dropdown-footer">
+        <button
+          type="button"
+          className="btn-link-new-device"
+          onClick={() => {
+            setIsDeviceMenuOpen(false);
+            setNewChildNameInput('');
+            setShowLinkDeviceModal(true);
+          }}
+        >
+          <Plus size={13} />
+          <span>Link another device to this account</span>
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="caretag-app-shell">
       {/* ── Caregiver Navigation Header ── */}
+      {/* ── Caregiver Navigation Header ── */}
       <header className="caretag-header" role="banner">
+        {/* Left: CareTag Logo */}
         <div className="caretag-header-left">
           <button
             type="button"
             className="brand-home-link"
-            onClick={onGoToLanding}
+            onClick={() => {
+              setActiveTab('overview');
+              setShowSetupWizard(false);
+              setIsMapExpanded(false);
+            }}
             title="CareTag Home"
           >
             <CareTagLogo variant="horizontal" size="sm" showTagline={false} />
           </button>
-
-          {/* Identity & Monitoring Context Bar: Monitored Person + Linked Devices */}
-          <div className="header-identity-nav" aria-label="Monitoring Context">
-            {/* Context Item 1: Monitored Person Selector */}
-            <div className="context-selector-wrap" ref={personMenuRef}>
-              <span className="context-kicker">MONITORING</span>
-              <button
-                type="button"
-                className={`context-pill context-pill--person ${isPersonMenuOpen ? 'is-open' : ''}`}
-                onClick={() => {
-                  setIsPersonMenuOpen(o => !o);
-                  setIsDeviceMenuOpen(false);
-                  setIsAccountMenuOpen(false);
-                }}
-                title="Switch monitored person"
-                aria-haspopup="true"
-                aria-expanded={isPersonMenuOpen}
-              >
-                <div className="context-avatar" style={{ backgroundColor: activeProfile.avatarColor || '#2563EB' }}>
-                  <span>{monitoredInitial}</span>
-                </div>
-                <span className="context-name">{monitoredName}</span>
-                <ChevronDown size={13} className="context-chevron" />
-              </button>
-
-              {isPersonMenuOpen && (
-                <div className="context-dropdown context-dropdown--person" role="menu">
-                  <div className="context-dropdown-header">
-                    <span className="context-dropdown-title">Monitored Person</span>
-                    <span className="context-dropdown-sub">Select who you want to view on the dashboard</span>
-                  </div>
-                  <div className="context-dropdown-list">
-                    {distinctPersons.map(person => {
-                      const isSelected = person.childName.trim().toLowerCase() === monitoredName.trim().toLowerCase();
-                      const initial = (person.childName?.trim().charAt(0) || 'C').toUpperCase();
-                      const countLinked = devicesList.filter(d => d.childName.trim().toLowerCase() === person.childName.trim().toLowerCase()).length;
-                      return (
-                        <button
-                          key={person.childName}
-                          type="button"
-                          className={`context-dropdown-item ${isSelected ? 'is-selected' : ''}`}
-                          onClick={() => handleSelectPerson(person)}
-                          role="menuitem"
-                        >
-                          <div className="context-avatar context-avatar--sm" style={{ backgroundColor: person.avatarColor || '#2563EB' }}>
-                            <span>{initial}</span>
-                          </div>
-                          <div className="context-item-info">
-                            <strong className="item-title">{person.childName}</strong>
-                            <span className="item-meta">
-                              {person.relation || 'Child'} {person.age ? `· Age ${person.age}` : ''} · {countLinked} {countLinked === 1 ? 'device' : 'devices'}
-                            </span>
-                          </div>
-                          {isSelected && <Check size={14} className="text-teal item-check" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <span className="context-separator" aria-hidden="true">&bull;</span>
-
-            {/* Context Item 2: Devices Linked to Monitored Person */}
-            <div className="context-selector-wrap" ref={deviceMenuRef}>
-              <span className="context-kicker">DEVICE</span>
-              <button
-                type="button"
-                className={`context-pill context-pill--device ${isDeviceMenuOpen ? 'is-open' : ''}`}
-                onClick={() => {
-                  setIsDeviceMenuOpen(o => !o);
-                  setIsPersonMenuOpen(false);
-                  setIsAccountMenuOpen(false);
-                }}
-                title={`Devices linked to ${monitoredName}`}
-                aria-haspopup="true"
-                aria-expanded={isDeviceMenuOpen}
-              >
-                <Radio size={12} className="context-device-icon" />
-                <span className="context-device-key">{selectedDeviceKey}</span>
-                <span className={`status-dot status-dot--sm ${
-                  simRunning
-                    ? 'status-dot--green'
-                    : hardwareStatus.deviceStatus === DEVICE_STATUS.LIVE
-                    ? 'status-dot--green'
-                    : hardwareStatus.deviceStatus === DEVICE_STATUS.STALE
-                    ? 'status-dot--yellow'
-                    : 'status-dot--neutral'
-                }`} />
-                <ChevronDown size={13} className="context-chevron" />
-              </button>
-
-              {isDeviceMenuOpen && (
-                <div className="context-dropdown context-dropdown--device" role="menu">
-                  <div className="context-dropdown-header">
-                    <span className="context-dropdown-title">Devices for {monitoredName}</span>
-                    <span className="context-dropdown-sub">Wearables paired with this profile</span>
-                  </div>
-                  <div className="context-dropdown-list">
-                    {linkedDevicesForPerson.length === 0 ? (
-                      <div className="context-dropdown-empty">
-                        <span>No devices linked to {monitoredName} yet.</span>
-                      </div>
-                    ) : (
-                      linkedDevicesForPerson.map(dev => {
-                        const isSelected = dev.deviceKey === selectedDeviceKey;
-                        const isOnline = isSelected && (simRunning || hardwareStatus.deviceStatus === DEVICE_STATUS.LIVE);
-                        const isAwaiting = isSelected && (hardwareStatus.deviceStatus === DEVICE_STATUS.WAITING_FOR_DATA || hardwareStatus.deviceStatus === DEVICE_STATUS.CONNECTING);
-                        const isStale = isSelected && hardwareStatus.deviceStatus === DEVICE_STATUS.STALE;
-                        const statusLabel = isSelected
-                          ? (simRunning
-                              ? 'Simulation Stream'
-                              : isOnline
-                              ? 'Online'
-                              : isAwaiting
-                              ? 'Awaiting first heartbeat'
-                              : isStale
-                              ? 'Delayed'
-                              : 'Offline')
-                          : 'Linked (Standby)';
-
-                        return (
-                          <button
-                            key={dev.id || dev.deviceKey}
-                            type="button"
-                            className={`context-dropdown-item ${isSelected ? 'is-selected' : ''}`}
-                            onClick={() => {
-                              handleSwitchDevice(dev.deviceKey);
-                              setIsDeviceMenuOpen(false);
-                            }}
-                            role="menuitem"
-                          >
-                            <div className="device-chip-icon">
-                              <Radio size={14} />
-                            </div>
-                            <div className="context-item-info">
-                              <div className="device-title-row">
-                                <strong className="item-title">{dev.deviceKey}</strong>
-                                <span className={`device-conn-tag ${isOnline ? 'tag--online' : isAwaiting || isStale ? 'tag--waiting' : 'tag--offline'}`}>
-                                  {statusLabel}
-                                </span>
-                              </div>
-                              <span className="item-meta">
-                                {dev.hardwareModel || 'ESP32 Smart Band'}
-                              </span>
-                            </div>
-                            {isSelected && <Check size={14} className="text-teal item-check" />}
-                          </button>
-                        );
-                      })
-                    )}
-                  </div>
-                  <div className="context-dropdown-footer">
-                    <button
-                      type="button"
-                      className="btn-link-new-device"
-                      onClick={() => {
-                        setIsDeviceMenuOpen(false);
-                        setNewChildNameInput(monitoredName);
-                        setShowLinkDeviceModal(true);
-                      }}
-                    >
-                      <Plus size={13} />
-                      <span>Link another device to {monitoredName.split(' ')[0]}</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
         </div>
 
-        {/* Center: Simplified Caregiver Navigation (Home, Safe Places, Alerts, Setup) */}
+        {/* Center: Simplified Caregiver Navigation (Dashboard, Safe Places, Alerts) */}
         <div className="caretag-header-center">
           <nav className="view-mode-tabs" aria-label="Caregiver views">
             <button
@@ -1062,7 +1047,7 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
               onClick={() => { setActiveTab('overview'); setShowSetupWizard(false); setIsMapExpanded(false); }}
             >
               <Shield size={14} />
-              <span>Home</span>
+              <span>Dashboard</span>
             </button>
 
             <button
@@ -1084,75 +1069,17 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
               <span>Alerts</span>
               {unackCount > 0 && <span className="tab-counter-badge tab-counter-badge--warn">{unackCount}</span>}
             </button>
-
-            <button
-              type="button"
-              className={`view-tab-btn ${showSetupWizard ? 'active' : ''}`}
-              onClick={() => {
-                setShowSetupWizard(true);
-                setIsMapExpanded(false);
-              }}
-              title="Guided Setup Wizard"
-            >
-              <Sliders size={14} />
-              <span>Setup</span>
-            </button>
           </nav>
         </div>
 
-        {/* Right: Telemetry Live Indicator, Inspector Shortcut, Authenticated Caregiver Account */}
+        {/* Right: Authenticated Caregiver Account Profile */}
         <div className="caretag-header-right">
-          {/* Live Telemetry / Simulation Badge */}
-          {(() => {
-            if (simRunning) {
-              return (
-                <div className="live-source-badge live-source-badge--sim" title="Demonstration scenario running">
-                  <span className="live-source-pulse" />
-                  <span className="live-source-label">Simulation Active</span>
-                </div>
-              );
-            }
-            const hwMeta = getDeviceStatusMeta(hardwareStatus.deviceStatus, hardwareStatus.ageSeconds);
-            const badgeClass = hwMeta.isLive
-              ? 'live-source-badge--hw'
-              : hwMeta.isStale
-              ? 'live-source-badge--stale'
-              : hardwareStatus.deviceStatus === DEVICE_STATUS.CONNECTION_ERROR
-              ? 'live-source-badge--error'
-              : 'live-source-badge--offline';
-            return (
-              <div className={`live-source-badge ${badgeClass}`} title={hwMeta.description}>
-                <span className="live-source-pulse" />
-                <span className="live-source-label">
-                  {hwMeta.badgeText}
-                </span>
-              </div>
-            );
-          })()}
-
-          {/* Dedicated Engineering Technical Inspector Button */}
-          <button
-            type="button"
-            className={`header-action-btn ${activeTab === 'inspector' && !showSetupWizard ? 'header-action-btn--active' : ''}`}
-            onClick={() => {
-              setShowSetupWizard(false);
-              setActiveTab(t => t === 'inspector' ? 'overview' : 'inspector');
-              setIsMapExpanded(false);
-            }}
-            title="Technical Inspector &amp; Capstone Console"
-          >
-            <Terminal size={14} />
-            <span className="header-btn-text">Inspector</span>
-          </button>
-
-          {/* Authenticated Caregiver Account Menu */}
           <div className="caregiver-account-wrap" ref={accountMenuRef}>
             <button
               type="button"
               className={`caregiver-account-pill ${isAccountMenuOpen ? 'is-open' : ''}`}
               onClick={() => {
                 setIsAccountMenuOpen(o => !o);
-                setIsPersonMenuOpen(false);
                 setIsDeviceMenuOpen(false);
               }}
               title={`Signed in as ${caregiverName} (${session.email})`}
@@ -1184,6 +1111,35 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
                     )}
                   </div>
                 </div>
+
+                <div className="account-menu-divider" />
+
+                <button
+                  type="button"
+                  className="account-menu-item"
+                  onClick={() => {
+                    setIsAccountMenuOpen(false);
+                    setNewChildNameInput('');
+                    setShowLinkDeviceModal(true);
+                  }}
+                  role="menuitem"
+                >
+                  <Plus size={14} />
+                  <span>Link another Smart Band</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="account-menu-item"
+                  onClick={() => {
+                    setIsAccountMenuOpen(false);
+                    setShowSetupWizard(true);
+                  }}
+                  role="menuitem"
+                >
+                  <Sliders size={14} />
+                  <span>Guided Device Setup</span>
+                </button>
 
                 <div className="account-menu-divider" />
 
@@ -1584,15 +1540,22 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
               geofences={geofences}
               hardwareStatus={hardwareStatus}
               simRunning={simRunning}
+              isSimPaused={isSimPaused}
               activeScenario={activeScenario}
               onStartScenario={handleStartScenario}
               onStopScenario={handleStopScenario}
               onResetScenario={handleResetScenario}
+              onPauseScenario={handlePauseScenario}
+              onResumeScenario={handleResumeScenario}
+              onRestartScenario={handleRestartScenario}
               onManualSimulate={handleManualSimulate}
               routineHistory={routineHistory}
               routineProfile={routineProfile}
               evaluationLog={evaluationLog}
               simulatedAlerts={simulatedAlerts}
+              selectedDeviceKey={selectedDeviceKey}
+              activeProfile={activeProfile}
+              caregiverName={caregiverName}
               onClose={() => setActiveTab('overview')}
             />
           ) : activeTab === 'alerts' ? (
@@ -1813,7 +1776,7 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
                 <div className="more-account-info">
                   <strong className="more-account-name">{session?.name || 'Caregiver User'}</strong>
                   <span className="more-account-email">{session?.email || 'Caregiver Account'}</span>
-                  <span className="more-account-role">Caregiver Administrator</span>
+                  <span className="more-account-role">{caregiverRoleLabel}</span>
                 </div>
               </div>
 
