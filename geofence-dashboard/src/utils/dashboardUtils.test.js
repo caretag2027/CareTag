@@ -4,6 +4,7 @@ import {
   evaluateSafetyState,
   getMonitoringReadiness,
   isScheduleActive,
+  getZoneCategoryColor,
   DEVICE_STATUS
 } from './dashboardUtils';
 
@@ -199,6 +200,21 @@ describe('dashboardUtils Unit Tests', () => {
       expect(isScheduleActive(schedule, eveningDate)).toBe(true);
       expect(isScheduleActive(schedule, morningDate)).toBe(true);
       expect(isScheduleActive(schedule, middayDate)).toBe(false);
+    });
+  });
+
+  describe('getZoneCategoryColor', () => {
+    test('returns correct brand colors for recognized categories', () => {
+      expect(getZoneCategoryColor('home')).toBe('#0D9488'); // Teal
+      expect(getZoneCategoryColor('school')).toBe('#2563EB'); // Royal Blue
+      expect(getZoneCategoryColor('park')).toBe('#059669'); // Emerald
+      expect(getZoneCategoryColor('work')).toBe('#4F46E5'); // Indigo
+      expect(getZoneCategoryColor('relative')).toBe('#D97706'); // Amber
+    });
+
+    test('returns slate when inactive or disabled', () => {
+      expect(getZoneCategoryColor('home', false, true)).toBe('#94A3B8'); // Disabled
+      expect(getZoneCategoryColor('home', true, false)).toBe('#64748B'); // Inactive schedule
     });
   });
 });

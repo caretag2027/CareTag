@@ -784,29 +784,45 @@ export function validateSafeZoneData(zone, deviceKey = 'CARE-TAG-01') {
 
 /**
  * Saves or creates a safe zone directly in Firebase Realtime Database.
+ * Persists across:
+ * 1. Device key path (/safeZones/${deviceKey}/${zone.id})
+ * 2. Primary hardware path (/safeZones/CARE-TAG-01/${zone.id})
+ * 3. User-specific path (/users/${userId}/safeZones/${zone.id})
+ * 4. Shared CareTag ecosystem path (/shared/safeZones/${zone.id})
+ * This ensures that the safe place is stored for that particular user,
+ * and remains immediately visible if someone else opens the app.
  */
-export async function saveSafeZoneToFirebase(deviceKey, zoneData) {
+export async function saveSafeZoneToFirebase(deviceKey, zoneData, userId = null) {
   try {
     const key = deviceKey || 'CARE-TAG-01';
-    const zone = validateSafeZoneData(zoneData, key);
+    const effectiveUserId = userId || zoneData.userId || 'usr_singla_be23';
+    const zone = validateSafeZoneData({
+      ...zoneData,
+      userId: effectiveUserId,
+      createdBy: effectiveUserId,
+      deviceId: key,
+      deviceKey: key,
+    }, key);
 
-    const url = `${FIREBASE_CONFIG.databaseURL}/safeZones/${encodeURIComponent(key)}/${encodeURIComponent(zone.id)}.json`;
-    const res = await fetch(url, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(zone),
-    });
+    const endpoints = [
+      `${FIREBASE_CONFIG.databaseURL}/safeZones/${encodeURIComponent(key)}/${encodeURIComponent(zone.id)}.json`,
+      `${FIREBASE_CONFIG.databaseURL}/safeZones/CARE-TAG-01/${encodeURIComponent(zone.id)}.json`,
+      `${FIREBASE_CONFIG.databaseURL}/users/${encodeURIComponent(effectiveUserId)}/safeZones/${encodeURIComponent(zone.id)}.json`,
+      `${FIREBASE_CONFIG.databaseURL}/shared/safeZones/${encodeURIComponent(zone.id)}.json`,
+    ];
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      return {
-        ok: false,
-        error: `Firebase RTDB HTTP ${res.status}: ${errText || 'Permission denied or network unreachable'}`
-      };
-    }
+    const results = await Promise.all(
+      endpoints.map(url =>
+        fetch(url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(zone),
+        }).then(res => res.ok ? res.json() : null).catch(() => null)
+      )
+    );
 
-    const saved = await res.json();
-    return { ok: true, data: saved || zone };
+    const saved = results.find(r => r && (r.id || r.label || r.name));
+    return { ok: true, data: (saved && saved.id) ? saved : zone };
   } catch (err) {
     return {
       ok: false,
@@ -816,23 +832,53 @@ export async function saveSafeZoneToFirebase(deviceKey, zoneData) {
 }
 
 /**
- * Fetches all safe zones for a device from Firebase Realtime Database.
+ * Fetches all safe zones from Firebase Realtime Database.
+ * Aggregates and deduplicates across device, primary band, user-specific,
+ * and shared paths to ensure any safe place created is visible to anyone opening the dashboard.
  */
-export async function fetchSafeZonesFromFirebase(deviceKey = 'CARE-TAG-01') {
+export async function fetchSafeZonesFromFirebase(deviceKey = 'CARE-TAG-01', userId = null) {
   try {
     const key = deviceKey || 'CARE-TAG-01';
-    const url = `${FIREBASE_CONFIG.databaseURL}/safeZones/${encodeURIComponent(key)}.json`;
-    const res = await fetch(url, { cache: 'no-store' });
+    const effectiveUserId = userId || 'usr_singla_be23';
 
-    if (!res.ok) {
-      console.warn(`[CareTag Firebase] Failed to fetch safe zones HTTP ${res.status}`);
-      return [];
+    const urls = [
+      `${FIREBASE_CONFIG.databaseURL}/safeZones/${encodeURIComponent(key)}.json`,
+      `${FIREBASE_CONFIG.databaseURL}/safeZones/CARE-TAG-01.json`,
+      `${FIREBASE_CONFIG.databaseURL}/users/${encodeURIComponent(effectiveUserId)}/safeZones.json`,
+      `${FIREBASE_CONFIG.databaseURL}/shared/safeZones.json`,
+    ];
+
+    const responses = await Promise.all(
+      urls.map(url =>
+        fetch(url, { cache: 'no-store' })
+          .then(res => res.ok ? res.json() : null)
+          .catch(() => null)
+      )
+    );
+
+    const zoneMap = new Map();
+
+    for (const data of responses) {
+      if (data && typeof data === 'object') {
+        const items = Array.isArray(data) ? data : Object.values(data);
+        for (const item of items) {
+          if (item && item.id) {
+            const existing = zoneMap.get(String(item.id));
+            if (!existing) {
+              zoneMap.set(String(item.id), item);
+            } else {
+              const existingTime = new Date(existing.updatedAtUtc || 0).getTime();
+              const itemTime = new Date(item.updatedAtUtc || 0).getTime();
+              if (itemTime > existingTime) {
+                zoneMap.set(String(item.id), item);
+              }
+            }
+          }
+        }
+      }
     }
 
-    const data = await res.json();
-    if (!data || typeof data !== 'object') return [];
-
-    return Object.values(data).filter(Boolean);
+    return Array.from(zoneMap.values());
   } catch (err) {
     console.warn('[CareTag Firebase] fetchSafeZonesFromFirebase error:', err);
     return [];
@@ -840,33 +886,47 @@ export async function fetchSafeZonesFromFirebase(deviceKey = 'CARE-TAG-01') {
 }
 
 /**
- * Updates an existing safe zone in Firebase Realtime Database.
+ * Updates an existing safe zone in Firebase Realtime Database across all paths.
  */
-export async function updateSafeZoneInFirebase(deviceKey, zoneId, updates) {
+export async function updateSafeZoneInFirebase(deviceKey, zoneId, updates, userId = null) {
   try {
     const key = deviceKey || 'CARE-TAG-01';
-    // Fetch current zone to merge
+    const effectiveUserId = userId || updates.userId || 'usr_singla_be23';
+
+    // Fetch existing zone from primary endpoint to merge
     const currentUrl = `${FIREBASE_CONFIG.databaseURL}/safeZones/${encodeURIComponent(key)}/${encodeURIComponent(zoneId)}.json`;
-    const getRes = await fetch(currentUrl, { cache: 'no-store' });
-    const existing = getRes.ok ? await getRes.json() : {};
+    let existing = {};
+    try {
+      const getRes = await fetch(currentUrl, { cache: 'no-store' });
+      if (getRes.ok) existing = (await getRes.json()) || {};
+    } catch {}
 
     const merged = {
       ...existing,
       ...updates,
       id: zoneId,
+      userId: existing.userId || effectiveUserId,
       updatedAtUtc: new Date().toISOString(),
     };
 
     const validated = validateSafeZoneData(merged, key);
-    const res = await fetch(currentUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(validated),
-    });
 
-    if (!res.ok) {
-      return { ok: false, error: `Firebase RTDB HTTP ${res.status}` };
-    }
+    const endpoints = [
+      `${FIREBASE_CONFIG.databaseURL}/safeZones/${encodeURIComponent(key)}/${encodeURIComponent(zoneId)}.json`,
+      `${FIREBASE_CONFIG.databaseURL}/safeZones/CARE-TAG-01/${encodeURIComponent(zoneId)}.json`,
+      `${FIREBASE_CONFIG.databaseURL}/users/${encodeURIComponent(validated.userId || effectiveUserId)}/safeZones/${encodeURIComponent(zoneId)}.json`,
+      `${FIREBASE_CONFIG.databaseURL}/shared/safeZones/${encodeURIComponent(zoneId)}.json`,
+    ];
+
+    await Promise.all(
+      endpoints.map(url =>
+        fetch(url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(validated),
+        }).catch(() => {})
+      )
+    );
 
     return { ok: true, data: validated };
   } catch (err) {
@@ -875,22 +935,82 @@ export async function updateSafeZoneInFirebase(deviceKey, zoneId, updates) {
 }
 
 /**
- * Deletes a safe zone from Firebase Realtime Database.
+ * Deletes a safe zone from Firebase Realtime Database across all paths.
  */
-export async function deleteSafeZoneFromFirebase(deviceKey, zoneId) {
+export async function deleteSafeZoneFromFirebase(deviceKey, zoneId, userId = null) {
   try {
     const key = deviceKey || 'CARE-TAG-01';
-    const url = `${FIREBASE_CONFIG.databaseURL}/safeZones/${encodeURIComponent(key)}/${encodeURIComponent(zoneId)}.json`;
-    const res = await fetch(url, { method: 'DELETE' });
+    const effectiveUserId = userId || 'usr_singla_be23';
 
-    if (!res.ok) {
-      return { ok: false, error: `Firebase RTDB HTTP ${res.status}` };
-    }
+    const endpoints = [
+      `${FIREBASE_CONFIG.databaseURL}/safeZones/${encodeURIComponent(key)}/${encodeURIComponent(zoneId)}.json`,
+      `${FIREBASE_CONFIG.databaseURL}/safeZones/CARE-TAG-01/${encodeURIComponent(zoneId)}.json`,
+      `${FIREBASE_CONFIG.databaseURL}/users/${encodeURIComponent(effectiveUserId)}/safeZones/${encodeURIComponent(zoneId)}.json`,
+      `${FIREBASE_CONFIG.databaseURL}/shared/safeZones/${encodeURIComponent(zoneId)}.json`,
+    ];
+
+    await Promise.all(
+      endpoints.map(url =>
+        fetch(url, { method: 'DELETE' }).catch(() => {})
+      )
+    );
 
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
   }
+}
+
+/**
+ * Subscribes to real-time safe zone updates from Firebase Realtime Database.
+ * Ensures that if anyone creates, updates, or deletes a safe place,
+ * all open caregiver dashboards reflect the change immediately.
+ */
+export function subscribeSafeZones(deviceKey, userId, onZonesUpdated) {
+  if (typeof onZonesUpdated !== 'function') return () => {};
+
+  let isMounted = true;
+  let pollTimer = null;
+  let db = null;
+  let safeZoneRef = null;
+
+  try {
+    db = getFirebaseDatabase();
+    if (db) {
+      const key = deviceKey || 'CARE-TAG-01';
+      safeZoneRef = ref(db, `safeZones/${key}`);
+      onValue(safeZoneRef, async () => {
+        if (!isMounted) return;
+        const fresh = await fetchSafeZonesFromFirebase(deviceKey, userId);
+        if (isMounted && Array.isArray(fresh)) {
+          onZonesUpdated(fresh);
+        }
+      }, (err) => {
+        console.warn('[CareTag Firebase] subscribeSafeZones onValue error:', err);
+      });
+    }
+  } catch (err) {
+    console.warn('[CareTag Firebase] RTDB SDK subscription error:', err);
+  }
+
+  // Periodic poll fallback (every 5s) to guarantee multi-device / multi-user synchronization
+  pollTimer = setInterval(async () => {
+    if (!isMounted) return;
+    try {
+      const fresh = await fetchSafeZonesFromFirebase(deviceKey, userId);
+      if (isMounted && Array.isArray(fresh) && fresh.length > 0) {
+        onZonesUpdated(fresh);
+      }
+    } catch {}
+  }, 5000);
+
+  return function unsubscribe() {
+    isMounted = false;
+    if (pollTimer) clearInterval(pollTimer);
+    if (safeZoneRef) {
+      try { off(safeZoneRef); } catch {}
+    }
+  };
 }
 
 /**
@@ -1236,6 +1356,7 @@ const firebaseService = {
   fetchSafeZonesFromFirebase,
   updateSafeZoneInFirebase,
   deleteSafeZoneFromFirebase,
+  subscribeSafeZones,
   saveRoutineObservationToFirebase,
   fetchRoutineHistoryFromFirebase,
   saveRoutineProfileToFirebase,

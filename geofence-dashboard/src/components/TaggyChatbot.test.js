@@ -145,4 +145,137 @@ describe('TaggyChatbot Component', () => {
     expect(screen.getByText(/What would you like help with\?/i)).toBeInTheDocument();
     expect(screen.queryByText(/connection status/i)).not.toBeInTheDocument();
   });
+
+  test('renders landing page mode with marketing welcome and product questions', async () => {
+    const handleLaunchDashboard = jest.fn();
+    render(
+      <TaggyChatbot
+        currentView="landing"
+        onLaunchDashboard={handleLaunchDashboard}
+      />
+    );
+
+    // Open chat
+    fireEvent.click(screen.getByRole('button', { name: /open taggy ai chatbot/i }));
+
+    // Verify Product Guide role tag
+    expect(screen.getByText('Product Guide')).toBeInTheDocument();
+
+    // Verify landing page marketing welcome text
+    expect(screen.getByText(/Welcome to CareTag/i)).toBeInTheDocument();
+    expect(screen.getByText(/routine-learning AI, battery life, and how CareTag keeps kids safe without false alarms/i)).toBeInTheDocument();
+
+    // Verify popular product questions
+    expect(screen.getByRole('button', { name: 'What makes CareTag different from regular GPS trackers?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'How does the AI routine learning work?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'What hardware and sensors are used in the smart band?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Can I try the live demonstration dashboard?' })).toBeInTheDocument();
+
+    // Click demo question
+    const demoBtn = screen.getByRole('button', { name: 'Can I try the live demonstration dashboard?' });
+    fireEvent.click(demoBtn);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/live interactive dashboard/i).length).toBeGreaterThan(0);
+    });
+
+    // Action button to launch dashboard should appear
+    const launchBtn = screen.getByRole('button', { name: /Open Dashboard/i });
+    expect(launchBtn).toBeInTheDocument();
+    fireEvent.click(launchBtn);
+    expect(handleLaunchDashboard).toHaveBeenCalled();
+  });
+
+  test('provides operational assistance with live location and recenters map in dashboard mode', async () => {
+    const handleRecenter = jest.fn();
+    render(
+      <TaggyChatbot
+        currentView="dashboard"
+        latest={{
+          latitude: 30.3491,
+          longitude: 76.4117,
+          nearestGeofence: 'Thapar Campus',
+          motionState: 'Walking',
+          speedKph: 4,
+          batteryPercent: 88,
+          isAnomaly: false
+        }}
+        onRecenterMap={handleRecenter}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /open taggy ai chatbot/i }));
+
+    const input = screen.getByPlaceholderText('Ask Taggy anything...');
+    fireEvent.change(input, { target: { value: 'Where is my child right now?' } });
+    fireEvent.submit(input.closest('form'));
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/Thapar Campus/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/30.3491/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Walking/i).length).toBeGreaterThan(0);
+    });
+
+    const showOnMapBtn = screen.getByRole('button', { name: /Show on Map/i });
+    expect(showOnMapBtn).toBeInTheDocument();
+    fireEvent.click(showOnMapBtn);
+    expect(handleRecenter).toHaveBeenCalled();
+  });
+
+  test('provides operational assistance for battery and alerts status in dashboard mode', async () => {
+    const handleNavigate = jest.fn();
+    render(
+      <TaggyChatbot
+        currentView="dashboard"
+        latest={{ batteryPercent: 94, batteryCharging: false }}
+        alerts={[
+          {
+            id: 'alert-1',
+            type: 'boundary_breach',
+            message: 'Child stepped outside Home boundary',
+            acknowledged: false,
+            timestamp: new Date().toISOString()
+          }
+        ]}
+        onNavigateTab={handleNavigate}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /open taggy ai chatbot/i }));
+
+    // Ask about battery
+    const input = screen.getByPlaceholderText('Ask Taggy anything...');
+    fireEvent.change(input, { target: { value: 'What is the battery level?' } });
+    fireEvent.submit(input.closest('form'));
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/94%/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/18 to 24 hours/i).length).toBeGreaterThan(0);
+    });
+
+    // Ask about alerts
+    fireEvent.change(input, { target: { value: 'Are there any alerts?' } });
+    fireEvent.submit(input.closest('form'));
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/1 active alert/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Boundary Breach/i).length).toBeGreaterThan(0);
+    });
+
+    const viewAlertsBtn = screen.getByRole('button', { name: /View Alerts/i });
+    expect(viewAlertsBtn).toBeInTheDocument();
+    fireEvent.click(viewAlertsBtn);
+    expect(handleNavigate).toHaveBeenCalledWith('alerts');
+  });
+
+  test('opens when caretag:open-taggy custom event is dispatched', () => {
+    render(<TaggyChatbot currentView="landing" />);
+
+    expect(screen.queryByRole('dialog', { name: /taggy ai companion chat/i })).not.toBeInTheDocument();
+
+    // Dispatch global event
+    fireEvent(window, new CustomEvent('caretag:open-taggy'));
+
+    expect(screen.getByRole('dialog', { name: /taggy ai companion chat/i })).toBeInTheDocument();
+  });
 });

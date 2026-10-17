@@ -16,7 +16,8 @@ import {
   ExternalLink,
   MapPin,
   Bell,
-  ArrowRight
+  ArrowRight,
+  Crosshair
 } from 'lucide-react';
 
 /* ──────────────────────────────────────────────────────────────
@@ -28,11 +29,11 @@ const CLOUDFLARE_EDGE_ENDPOINT = '/api/chat';
 const GROQ_MODELS = ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
 
 /* ──────────────────────────────────────────────────────────────
-   CAREGIVER-FIRST DYNAMIC SYSTEM PROMPT BUILDER
+   DYNAMIC SYSTEM PROMPT BUILDER (LANDING VS DASHBOARD)
    ────────────────────────────────────────────────────────────── */
 function buildSystemPrompt(appState = {}) {
   const {
-    currentView = 'landing',
+    currentView = 'dashboard',
     activeTab = 'overview',
     bandStatus = {},
     hardwareStatus = {},
@@ -41,6 +42,25 @@ function buildSystemPrompt(appState = {}) {
     latest = null,
   } = appState;
 
+  // 1. Landing Page Marketing Persona
+  if (currentView === 'landing') {
+    return `You are Taggy, the intelligent product guide and AI companion for CareTag (a smart child safety wearable and routine monitoring system developed as a capstone project at Thapar Institute of Engineering & Technology, Batch of 2027).
+
+PRODUCT OVERVIEW FOR PROSPECTIVE CAREGIVERS & JUDGES:
+- What CareTag is: A context-aware child safety wearable band (ESP32 MCU, u-blox Neo-6M GPS, SIM800L cellular, MPU-6050 6-axis motion/fall sensor) paired with routine-learning AI.
+- Key Advantage: Dual-check routine intelligence. Unlike standard GPS trackers that only alert on static circles, CareTag learns habitual daily transit corridors and stay-points across 48 daily 30-minute intervals. It suppresses false alarms from GPS drift (45m spatial hysteresis, temporal smoothing) and catches abnormal deviations early.
+- Battery Life: 18–24 hours with dynamic sleep scheduling (sleeps during static dwell times, wakes on movement).
+- Privacy: TLS encrypted end-to-end telemetry, private isolated accounts, zero third-party tracking.
+- Team: Kinjal, Guneev Taneja, Bhavishya Singla, Manya Sharma, Anureet (Mentored by Dr. Kapil Tomar).
+
+RESPONSE GUIDELINES:
+- Keep answers concise, clear, and welcoming (strictly 40 to 80 words).
+- When appropriate, encourage the visitor to click "Launch Live Demo" to experience the interactive dashboard.
+- For technical depth queries, summarize simply first, then provide deep engineering details inside <details><summary>How does this work technically?</summary>...</details>.
+- Never guarantee 100% safety. Maintain honest, reliable communication.`;
+  }
+
+  // 2. Dashboard Operational Guardian Persona
   const effectiveBand = hardwareStatus?.connected !== undefined ? hardwareStatus : (bandStatus || {});
   const isConnected = effectiveBand.connected !== undefined ? Boolean(effectiveBand.connected) : true;
   const isStale = Boolean(effectiveBand.isStale);
@@ -51,7 +71,7 @@ function buildSystemPrompt(appState = {}) {
   const topAlert = alerts.find(a => !a.acknowledged) || alerts[0];
 
   const contextSnippet = `APPLICATION CONTEXT:
-- Current View: ${currentView === 'dashboard' ? `Dashboard (${activeTab} tab)` : 'CareTag Home & Product Page'}
+- Current View: Dashboard (${activeTab} tab)
 - Smart Band: ${isConnected ? 'Connected' : 'Offline / Reconnecting'} (Battery: ${batteryPercent}%, Telemetry freshness: ${isStale ? 'Stale / Delayed' : 'Fresh live updates'})
 - Safe Places: ${zoneCount > 0 ? `${zoneCount} safe places configured (${zoneNames})` : 'No safe places configured yet'}
 - Recent Alert: ${topAlert ? `${topAlert.type}: "${topAlert.message}" (${new Date(topAlert.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})` : 'No active alerts'}`;
@@ -83,9 +103,9 @@ ${contextSnippet}`;
 }
 
 /* ──────────────────────────────────────────────────────────────
-   CURATED CAREGIVER STARTER QUESTIONS & EXACT PRESET ANSWERS
+   CURATED CAREGIVER STARTER QUESTIONS & EXACT PRESET ANSWERS (DASHBOARD)
    ────────────────────────────────────────────────────────────── */
-const CAREGIVER_PRESETS = [
+export const CAREGIVER_PRESETS = [
   {
     id: 'safe-place',
     label: 'How do I set up a safe place?',
@@ -210,6 +230,89 @@ Hardware specifications:
 - **Cellular:** SIM800L GSM/GPRS module
 - **Motion & Fall:** MPU-6050 6-axis accelerometer & gyroscope
 </details>`;
+    }
+  }
+];
+
+/* ──────────────────────────────────────────────────────────────
+   CURATED MARKETING & PRODUCT QUESTIONS (LANDING PAGE)
+   ────────────────────────────────────────────────────────────── */
+export const MARKETING_PRESETS = [
+  {
+    id: 'diff-gps',
+    label: 'What makes CareTag different from regular GPS trackers?',
+    prompt: 'What makes CareTag different from regular GPS trackers?',
+    actionType: 'launch_demo',
+    actionLabel: 'Launch Live Demo',
+    getAnswer: () => {
+      return `Standard GPS trackers only show a dot on a map or alert on static circles. CareTag combines safe-place boundaries with **routine-aware AI** that learns habitual commute corridors across 48 daily time slots. It prevents false alarms caused by GPS drift and detects unexpected wanderings early.
+
+1. **Dual Independent Checks:** Evaluates geofence boundaries and routine deviations separately.
+2. **Reduced False Alarms:** 45-meter spatial hysteresis and temporal smoothing filter out GPS jitter.
+3. **Contextual Alerts:** Delivers clear deviation confidence scores so parents can make informed decisions.`;
+    }
+  },
+  {
+    id: 'how-ai-works',
+    label: 'How does the AI routine learning work?',
+    prompt: 'How does the AI routine learning work?',
+    actionType: 'launch_demo',
+    actionLabel: 'Explore 4-Day Demo',
+    getAnswer: () => {
+      return `CareTag automatically learns your child's habitual stay-points (home, school, playground) and transit routes over 3 to 5 days. It evaluates incoming coordinates in under 80ms against time-of-day expectations, alerting only when abnormal detours occur.
+
+<details>
+<summary>How does this work technically?</summary>
+The system extracts stay-points (dwell time ≥ 20m) and uses a Dual-Input LSTM neural network trained on trajectory patterns. It balances spatial centroid distance with temporal time-slot likelihood: Deviation Score = 0.5 × Spatial + 0.5 × Temporal.
+</details>`;
+    }
+  },
+  {
+    id: 'band-hardware',
+    label: 'What hardware and sensors are used in the smart band?',
+    prompt: 'What hardware and sensors are used in the smart band?',
+    getAnswer: () => {
+      return `The CareTag wearable is a lightweight band featuring high-sensitivity GPS, cellular telemetry for sending updates, and 6-axis motion sensing to detect activity states and fall events.
+
+<details>
+<summary>How does this work technically?</summary>
+Hardware specifications:
+- **MCU:** ESP32 32-bit dual-core Wi-Fi/BLE microcontroller
+- **GPS Receiver:** u-blox Neo-6M high-sensitivity positioning
+- **Cellular:** SIM800L GSM/GPRS module
+- **Motion & Fall:** MPU-6050 6-axis accelerometer & gyroscope
+- **Battery Life:** ~18–24 hours with dynamic sleep scheduling
+</details>`;
+    }
+  },
+  {
+    id: 'try-demo',
+    label: 'Can I try the live demonstration dashboard?',
+    prompt: 'Can I try the live demonstration dashboard?',
+    actionType: 'launch_demo',
+    actionLabel: 'Open Dashboard',
+    getAnswer: () => {
+      return `Yes! You can explore our live interactive dashboard right now. Configure custom safe places, test capstone simulation scenarios (such as an unexpected school detour), and inspect live telemetry diagnostics.
+
+1. Click **Open Dashboard** below or in the top navigation.
+2. No installation or registration is required for the demonstration.
+3. Experience real-time geofence monitoring and anomaly simulation.`;
+    }
+  },
+  {
+    id: 'battery-pricing',
+    label: 'How long does the wearable battery last?',
+    prompt: 'How long does the wearable battery last?',
+    getAnswer: () => {
+      return `The CareTag smart band operates for **18 to 24 hours** on a single charge. It employs dynamic sleep scheduling: entering low-power mode during stationary dwell times and waking instantly upon motion detection. Recharging takes approximately 45 minutes via magnetic USB.`;
+    }
+  },
+  {
+    id: 'privacy-family',
+    label: 'How does CareTag protect family privacy?',
+    prompt: 'How does CareTag protect family privacy?',
+    getAnswer: () => {
+      return `Privacy and child safety are our highest priorities. Location data is securely encrypted in transit via TLS and isolated to private caregiver accounts. Routine observations are processed directly on the device and secure edge workers without advertising trackers or third-party profiling.`;
     }
   }
 ];
@@ -356,7 +459,7 @@ function MarkdownRenderer({ content, isNested = false }) {
    MAIN TAGGY CHATBOT COMPONENT
    ────────────────────────────────────────────────────────────── */
 export default function TaggyChatbot({
-  currentView = 'landing',
+  currentView = 'dashboard',
   activeTab = 'overview',
   hardwareStatus = { connected: true, batteryPercent: 92 },
   geofences = [],
@@ -364,7 +467,10 @@ export default function TaggyChatbot({
   latest = null,
   simRunning = false,
   onNavigateTab = null,
-  onOpenInspector = null
+  onOpenInspector = null,
+  onLaunchDashboard = null,
+  onOpenAuth = null,
+  onRecenterMap = null
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -375,17 +481,28 @@ export default function TaggyChatbot({
   const [showQuestions, setShowQuestions] = useState(true);
   const [isOnline, setIsOnline] = useState(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
 
-  // Caregiver-first welcome greeting
-  const [messages, setMessages] = useState([
+  // Dynamic welcome greeting based on view (landing marketing vs dashboard caregiver)
+  const getWelcomeText = (viewMode) => {
+    if (viewMode === 'landing') {
+      return `Hi, I'm **Taggy**! Welcome to CareTag.
+
+I can answer questions about our smart wearable, routine-learning AI, battery life, and how CareTag keeps kids safe without false alarms.
+
+What would you like to know?`;
+    }
+    return `Hi, I'm **Taggy**!
+
+I can help you set up safe places, understand alerts, and use your CareTag dashboard.
+
+What would you like help with?`;
+  };
+
+  const [messages, setMessages] = useState(() => [
     {
       id: 'welcome-msg',
       sender: 'bot',
       time: 'Just now',
-      text: `Hi, I'm **Taggy**!
-
-I can help you set up safe places, understand alerts, and use your CareTag dashboard.
-
-What would you like help with?`
+      text: getWelcomeText(currentView)
     }
   ]);
 
@@ -393,6 +510,27 @@ What would you like help with?`
   const feedRef = useRef(null);
   const inputRef = useRef(null);
   const isUserNearBottomRef = useRef(true);
+
+  // Synchronize initial welcome greeting when currentView prop changes
+  useEffect(() => {
+    setMessages([
+      {
+        id: `welcome-${Date.now()}`,
+        sender: 'bot',
+        time: 'Just now',
+        text: getWelcomeText(currentView)
+      }
+    ]);
+  }, [currentView]);
+
+  // Listen for global custom event to open Taggy from any page element (e.g. landing page banner)
+  useEffect(() => {
+    const handleExternalOpen = () => {
+      setIsOpen(true);
+    };
+    window.addEventListener('caretag:open-taggy', handleExternalOpen);
+    return () => window.removeEventListener('caretag:open-taggy', handleExternalOpen);
+  }, []);
 
   // Network status listener
   useEffect(() => {
@@ -441,11 +579,7 @@ What would you like help with?`
         id: `welcome-${Date.now()}`,
         sender: 'bot',
         time: 'Just now',
-        text: `Hi, I'm **Taggy**!
-
-I can help you set up safe places, understand alerts, and use your CareTag dashboard.
-
-What would you like help with?`
+        text: getWelcomeText(currentView)
       }
     ]);
     setShowQuestions(true);
@@ -463,7 +597,7 @@ What would you like help with?`
     simRunning
   };
 
-  // Send message handler with Edge Worker + Groq API + Smart Presets
+  // Send message handler with Edge Worker + Groq API + Curated Presets
   const handleSend = async (userText = null) => {
     const textToSend = (userText || input).trim();
     if (!textToSend || isLoading) return;
@@ -484,19 +618,133 @@ What would you like help with?`
     setInput('');
     setIsLoading(true);
 
-    // Exact preset check
     const cleanInput = textToSend.trim().toLowerCase().replace(/[?!.,]/g, '');
-    const matchedPreset = CAREGIVER_PRESETS.find(q => {
+
+    // Check presets for active persona
+    const activePresets = currentView === 'landing' ? MARKETING_PRESETS : CAREGIVER_PRESETS;
+    let matchedPreset = activePresets.find(q => {
       const p = q.prompt.trim().toLowerCase().replace(/[?!.,]/g, '');
       const l = q.label.trim().toLowerCase().replace(/[?!.,]/g, '');
       return cleanInput === p || cleanInput === l || textToSend.toLowerCase() === q.prompt.toLowerCase();
     });
 
-    let replyText = null;
-    let replyActionTab = matchedPreset?.actionTab || null;
-    let replyActionLabel = matchedPreset?.actionLabel || null;
+    // Fallback search across alternate presets if not found
+    if (!matchedPreset) {
+      const otherPresets = currentView === 'landing' ? CAREGIVER_PRESETS : MARKETING_PRESETS;
+      matchedPreset = otherPresets.find(q => {
+        const p = q.prompt.trim().toLowerCase().replace(/[?!.,]/g, '');
+        const l = q.label.trim().toLowerCase().replace(/[?!.,]/g, '');
+        return cleanInput === p || cleanInput === l || textToSend.toLowerCase() === q.prompt.toLowerCase();
+      });
+    }
 
-    if (!replyActionTab) {
+    // ── Dedicated Operational Handling (Dashboard Mode) ──
+    let operationalReply = null;
+
+    if (currentView === 'dashboard') {
+      // 1. Where is the child / live location query
+      if (/(where\s+is|where's|current\s+location|where\s+are\s+they|find\s+(child|him|her|bhavishya)|locate)/i.test(textToSend)) {
+        const lat = appState?.latest?.latitude ?? appState?.latest?.lat;
+        const lng = appState?.latest?.longitude ?? appState?.latest?.lng;
+        const zone = appState?.latest?.nearestGeofence || (appState?.geofences?.[0]?.label);
+        const isStale = Boolean(appState?.hardwareStatus?.isStale);
+        const isAnomaly = Boolean(appState?.latest?.isAnomaly);
+        const motion = appState?.latest?.motionState || 'Normal movement';
+        const speed = appState?.latest?.speedKph ?? 0;
+
+        if (lat && lng) {
+          operationalReply = {
+            text: `Your child was last reported near **${zone || 'their designated area'}** (${Number(lat).toFixed(4)}° N, ${Number(lng).toFixed(4)}° E).
+
+- **Safety Status:** ${isAnomaly ? '⚠️ Flagged outside designated boundary' : '✅ Safe within designated boundary'}
+- **Activity:** ${motion} (${speed} km/h)
+- **Freshness:** ${isStale ? 'Delayed telemetry' : 'Fresh live satellite GPS'}
+
+Click **Show on Map** below to center the live tracking view.`,
+            actionType: 'recenter_map',
+            actionLabel: 'Show on Map'
+          };
+        } else {
+          operationalReply = {
+            text: `The smart band is currently establishing satellite positioning. Safe places like Home and School are active on your map. Fresh coordinates will appear as soon as the next heartbeat packet is received.`,
+            actionType: 'recenter_map',
+            actionLabel: 'Check Map'
+          };
+        }
+      }
+      // 2. Battery status query
+      else if (/(battery|charge|power\s+level|battery\s+percent)/i.test(textToSend)) {
+        const battery = appState?.latest?.batteryPercent ?? appState?.hardwareStatus?.batteryPercent ?? 92;
+        const isCharging = Boolean(appState?.latest?.batteryCharging);
+        operationalReply = {
+          text: `The smart band battery is currently at **${battery}%** (${isCharging ? 'Charging' : 'On battery power'}).
+
+With dynamic sleep scheduling, the band operates for **18 to 24 hours** between charges. ${battery < 20 ? '⚠️ Battery is low — please connect the magnetic USB charger soon.' : '✅ Sufficient charge for all-day routine monitoring.'}
+
+1. Charges to 100% in approximately 45 minutes.
+2. Low-battery warnings trigger automatically below 20%.`
+        };
+      }
+      // 3. Alerts status query
+      else if (/(are\s+there\s+any\s+alerts|check\s+alerts|active\s+alerts|is\s+(he|she|child)\s+safe|any\s+issues)/i.test(textToSend)) {
+        const unack = (appState?.alerts || []).filter(a => !a.acknowledged && a.type !== 'nominal_safety');
+        if (unack.length > 0) {
+          const top = unack[0];
+          operationalReply = {
+            text: `⚠️ You have **${unack.length} active alert${unack.length > 1 ? 's' : ''}** needing review.
+
+Latest incident: **${top.type === 'boundary_breach' ? 'Boundary Breach' : 'Route Deviation'}**
+*"${top.message}"*
+
+Review the details and acknowledge the alert in your Alerts tab.`,
+            actionTab: 'alerts',
+            actionLabel: 'View Alerts'
+          };
+        } else {
+          operationalReply = {
+            text: `✅ All clear! There are no active unacknowledged safety alerts.
+
+All recorded journeys have stayed within designated safe places and followed expected daily routine corridors.`,
+            actionTab: 'alerts',
+            actionLabel: 'Open Alerts Log'
+          };
+        }
+      }
+    }
+
+    // ── Dedicated Operational Handling (Landing Page Mode) ──
+    if (currentView === 'landing' && !matchedPreset) {
+      if (/(try|demo|test|dashboard|experience)/i.test(textToSend)) {
+        operationalReply = {
+          text: `You can try our live interactive dashboard immediately! Configure custom safe places, test capstone simulation scenarios (like school detours), and inspect telemetry diagnostics in real time.
+
+Click **Launch Live Demo** below to get started with no account setup required.`,
+          actionType: 'launch_demo',
+          actionLabel: 'Launch Live Demo'
+        };
+      } else if (/(price|cost|buy|order|how\s+much)/i.test(textToSend)) {
+        operationalReply = {
+          text: `CareTag was developed as a university capstone project at Thapar Institute of Engineering & Technology (Batch of 2027). The hardware prototype uses accessible components with a bill of materials under $25, and our software dashboard is open for live demonstration.`,
+          actionType: 'launch_demo',
+          actionLabel: 'Explore Live Demo'
+        };
+      } else if (/(sign\s*in|login|account|register)/i.test(textToSend)) {
+        operationalReply = {
+          text: `Caregivers can sign in to access their private smart band telemetry, personalized safe zones, and family alerts.
+
+Click **Sign In** below to proceed to the caregiver login page.`,
+          actionType: 'open_auth',
+          actionLabel: 'Sign In'
+        };
+      }
+    }
+
+    let replyText = operationalReply?.text || null;
+    let replyActionTab = operationalReply?.actionTab || matchedPreset?.actionTab || null;
+    let replyActionLabel = operationalReply?.actionLabel || matchedPreset?.actionLabel || null;
+    let replyActionType = operationalReply?.actionType || matchedPreset?.actionType || null;
+
+    if (!replyActionTab && !replyActionType) {
       if (/safe(\s*|-)?(place|zone)|geofence/i.test(textToSend)) {
         replyActionTab = 'safezones';
         replyActionLabel = 'Open Safe Places';
@@ -506,7 +754,15 @@ What would you like help with?`
       } else if (/telemetry|inspector|sensor|hardware|model|formula/i.test(textToSend)) {
         replyActionTab = 'inspector';
         replyActionLabel = 'Open Technical Inspector';
+      } else if (currentView === 'landing' && /demo|dashboard/i.test(textToSend)) {
+        replyActionType = 'launch_demo';
+        replyActionLabel = 'Launch Live Demo';
       }
+    }
+
+    // ── If already resolved via operationalReply or matchedPreset, we can use it immediately when offline ──
+    if (!replyText && matchedPreset) {
+      replyText = matchedPreset.getAnswer(appState);
     }
 
     const systemPrompt = buildSystemPrompt(appState);
@@ -572,12 +828,17 @@ What would you like help with?`
       }
     }
 
-    // ── 3. Curated Caregiver Fallback if Offline or API unavailable ──
+    // ── 3. Final Fallback if API was unavailable ──
     if (!replyText) {
-      if (matchedPreset) {
-        replyText = matchedPreset.getAnswer(appState);
+      if (currentView === 'landing') {
+        replyText = `I'm here to answer questions about CareTag's smart child safety band, routine-learning AI, and real-time dashboard.
+
+Feel free to ask about our sensor hardware, 4-day routine learning, or click below to explore the live dashboard demo!`;
+        if (!replyActionType) {
+          replyActionType = 'launch_demo';
+          replyActionLabel = 'Open Live Demo';
+        }
       } else {
-        // Safe, concise caregiver-first fallback
         replyText = `I'm here to help you monitor your child's safety with CareTag.
 
 You can check their location on the map, set up safe places in **Safe Places**, or review notifications in **Alerts**. If you are looking for specific technical documentation, you can open the Technical Inspector anytime.`;
@@ -593,15 +854,16 @@ You can check their location on the map, set up safe places in **Safe Places**, 
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         text: replyText,
         actionTab: replyActionTab,
-        actionLabel: replyActionLabel
+        actionLabel: replyActionLabel,
+        actionType: replyActionType
       }
     ]);
 
     setIsLoading(false);
   };
 
-  // 4 Primary Caregiver Starter Questions for Quick Selection
-  const starterQuestions = CAREGIVER_PRESETS.slice(0, 4);
+  // 4 Primary Starter Questions for Quick Selection based on currentView
+  const starterQuestions = (currentView === 'landing' ? MARKETING_PRESETS : CAREGIVER_PRESETS).slice(0, 4);
 
   return (
     <div className="taggy-bot-root">
@@ -643,7 +905,7 @@ You can check their location on the map, set up safe places in **Safe Places**, 
         </div>
       )}
 
-      {/* ── Expanded Caregiver-First Chat Window ── */}
+      {/* ── Expanded Caregiver/Marketing Chat Window ── */}
       {isOpen && (
         <div
           className={`taggy-chat-window ${isExpanded ? 'taggy-window--expanded' : ''}`}
@@ -659,7 +921,9 @@ You can check their location on the map, set up safe places in **Safe Places**, 
               <div className="taggy-header-text">
                 <h3>
                   Taggy
-                  <span className="taggy-role-tag">AI Companion</span>
+                  <span className="taggy-role-tag">
+                    {currentView === 'landing' ? 'Product Guide' : 'AI Companion'}
+                  </span>
                 </h3>
                 <p className="status-line">
                   <span className={`dot-online ${!isOnline ? 'dot-offline' : ''}`} />
@@ -737,16 +1001,32 @@ You can check their location on the map, set up safe places in **Safe Places**, 
                       )}
 
                       {/* Contextual Quick Action Pill if relevant */}
-                      {isBot && msg.actionTab && onNavigateTab && (
+                      {isBot && (msg.actionTab || msg.actionType) && (
                         <div className="taggy-msg-action-pill-wrap">
                           <button
                             type="button"
                             className="taggy-action-pill-btn"
-                            onClick={() => onNavigateTab(msg.actionTab)}
+                            onClick={() => {
+                              if (msg.actionTab && onNavigateTab) {
+                                onNavigateTab(msg.actionTab);
+                              } else if (msg.actionType === 'recenter_map' && onRecenterMap) {
+                                onRecenterMap();
+                              } else if (msg.actionType === 'launch_demo' && onLaunchDashboard) {
+                                onLaunchDashboard();
+                              } else if (msg.actionType === 'open_auth' && onOpenAuth) {
+                                onOpenAuth();
+                              } else if (msg.actionType === 'open_inspector' && onOpenInspector) {
+                                onOpenInspector();
+                              }
+                            }}
                           >
                             {msg.actionTab === 'safezones' && <MapPin size={11} />}
                             {msg.actionTab === 'alerts' && <Bell size={11} />}
-                            <span>{msg.actionLabel || 'Go to page'}</span>
+                            {msg.actionType === 'recenter_map' && <Crosshair size={11} />}
+                            {msg.actionType === 'launch_demo' && <Sparkles size={11} />}
+                            {msg.actionType === 'open_auth' && <User size={11} />}
+                            {msg.actionType === 'open_inspector' && <Settings size={11} />}
+                            <span>{msg.actionLabel || 'View'}</span>
                             <ArrowRight size={10} />
                           </button>
                         </div>
@@ -781,12 +1061,14 @@ You can check their location on the map, set up safe places in **Safe Places**, 
               );
             })}
 
-            {/* Suggested Questions Grid (Caregiver-Focused) */}
+            {/* Suggested Questions Grid (Caregiver or Marketing Focused) */}
             {(messages.length <= 1 || showQuestions) && (
               <div className="taggy-front-questions">
                 <div className="front-questions-header">
                   <Sparkles size={12} className="sparkle-gold" />
-                  <span>Suggested questions:</span>
+                  <span>
+                    {currentView === 'landing' ? 'Popular product questions:' : 'Suggested questions:'}
+                  </span>
                 </div>
                 <div className="front-questions-grid">
                   {starterQuestions.map((q) => (
@@ -853,7 +1135,7 @@ You can check their location on the map, set up safe places in **Safe Places**, 
                 ref={inputRef}
                 type="text"
                 className="taggy-chat-input"
-                placeholder="Ask Taggy anything..."
+                placeholder={currentView === 'landing' ? 'Ask about CareTag features, battery, AI...' : 'Ask Taggy anything...'}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 disabled={isLoading}
@@ -870,7 +1152,7 @@ You can check their location on the map, set up safe places in **Safe Places**, 
             </form>
 
             <div className="taggy-footer-meta">
-              <span>CareTag AI Companion</span>
+              <span>{currentView === 'landing' ? 'CareTag Product Guide' : 'CareTag AI Companion'}</span>
               <span>{isOnline ? 'Online' : 'Offline Mode'}</span>
             </div>
           </div>

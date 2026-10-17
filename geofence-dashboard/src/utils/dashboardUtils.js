@@ -509,3 +509,19 @@ export function getMonitoringReadiness(geofences = [], packet = null, hardwareSt
     ],
   };
 }
+
+/**
+ * Returns a consistent, harmonious brand color for a safe place category.
+ */
+export function getZoneCategoryColor(category, isEnabled = true, isScheduled = true) {
+  if (!isEnabled) return '#94A3B8';
+  if (!isScheduled) return '#64748B';
+  const c = String(category || '').toLowerCase();
+  if (c.includes('home')) return '#0D9488'; // Teal
+  if (c.includes('school') || c.includes('campus')) return '#2563EB'; // Royal Blue
+  if (c.includes('park') || c.includes('play')) return '#059669'; // Emerald
+  if (c.includes('work') || c.includes('office')) return '#4F46E5'; // Indigo
+  if (c.includes('relative') || c.includes('grand')) return '#D97706'; // Amber
+  return '#2563EB';
+}
+

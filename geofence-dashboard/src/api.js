@@ -13,6 +13,7 @@ import {
   fetchSafeZonesFromFirebase,
   updateSafeZoneInFirebase,
   deleteSafeZoneFromFirebase,
+  subscribeSafeZones as subscribeSafeZonesFirebase,
   FIREBASE_CONFIG
 } from './firebase';
 
@@ -21,7 +22,7 @@ const API_BASE = process.env.REACT_APP_API_URL !== undefined
   : '';
 const DEFAULT_DEVICE_KEY = process.env.REACT_APP_DEVICE_KEY || 'CARE-TAG-01';
 
-// ── User-scoped localStorage helpers ──
+// ── User-scoped & Shared localStorage helpers ──
 
 function getUserId() {
   const session = getSession();
@@ -47,21 +48,35 @@ function getAuthHeaders() {
 function loadLocalGeofences(userId) {
   try {
     const key = userKey(userId || getUserId(), 'geofences');
-    return JSON.parse(localStorage.getItem(key)) || [];
+    const userZones = JSON.parse(localStorage.getItem(key));
+    if (Array.isArray(userZones) && userZones.length > 0) return userZones;
+
+    // Shared fallback: check if another user set up safe places on this device
+    const sharedZones = JSON.parse(localStorage.getItem('caretag.shared.geofences'));
+    if (Array.isArray(sharedZones) && sharedZones.length > 0) return sharedZones;
+
+    // Primary institutional account fallback
+    const primaryZones = JSON.parse(localStorage.getItem('caretag.usr_singla_be23.geofences'));
+    if (Array.isArray(primaryZones) && primaryZones.length > 0) return primaryZones;
+
+    return [];
   } catch { return []; }
 }
 
 function saveLocalGeofences(userId, list) {
   try {
-    const key = userKey(userId || getUserId(), 'geofences');
+    const uid = userId || getUserId();
+    const key = userKey(uid, 'geofences');
     localStorage.setItem(key, JSON.stringify(list));
+    // Also save to shared cache so any other user opening on this device immediately sees them
+    localStorage.setItem('caretag.shared.geofences', JSON.stringify(list));
   } catch {}
 }
 
 /**
  * Normalizes geofence object for consistency across UI and backend.
  */
-function normalizeZone(zone, deviceKey) {
+function normalizeZone(zone, deviceKey, userId = null) {
   const label = (zone.label || zone.name || 'Safe Place').trim();
   const lat = Number(zone.centerLatitude ?? zone.latitude ?? zone.lat ?? 30.3491);
   const lng = Number(zone.centerLongitude ?? zone.longitude ?? zone.lng ?? 76.4117);
@@ -71,6 +86,8 @@ function normalizeZone(zone, deviceKey) {
     id: String(zone.id || `zone-${Date.now()}`),
     deviceId: deviceKey || getActiveDeviceKey(),
     deviceKey: deviceKey || getActiveDeviceKey(),
+    userId: userId || zone.userId || getUserId(),
+    createdBy: userId || zone.createdBy || getUserId(),
     label,
     name: label,
     category: (zone.category || 'home').toLowerCase(),
@@ -96,19 +113,24 @@ function normalizeZone(zone, deviceKey) {
 
 /**
  * Creates or saves a safe zone.
- * First writes to Firebase Realtime Database, then updates local storage and Cloudflare Worker.
+ * Persists to Firebase Realtime Database across:
+ * - User-specific path (/users/${userId}/safeZones)
+ * - Device path (/safeZones/${deviceKey})
+ * - Shared path (/shared/safeZones)
+ * and updates local caches.
  */
-export async function createGeofence(zoneData, deviceKey = getActiveDeviceKey()) {
-  const uid = getUserId();
-  const normalized = normalizeZone(zoneData, deviceKey);
+export async function createGeofence(zoneData, deviceKey = getActiveDeviceKey(), userId = null) {
+  const uid = userId || zoneData.userId || getUserId();
+  const effectiveKey = deviceKey || getActiveDeviceKey();
+  const normalized = normalizeZone(zoneData, effectiveKey, uid);
 
-  // 1. Write directly to Firebase Realtime Database
-  const fbResult = await saveSafeZoneToFirebase(deviceKey, normalized);
+  // 1. Write directly to Firebase Realtime Database across all paths
+  const fbResult = await saveSafeZoneToFirebase(effectiveKey, normalized, uid);
 
   // Determine effective zone
   const savedZone = (fbResult && fbResult.ok && fbResult.data) ? fbResult.data : normalized;
 
-  // 2. Persist to user-scoped LocalStorage
+  // 2. Persist to LocalStorage (user + shared)
   const localList = loadLocalGeofences(uid);
   const existingIdx = localList.findIndex(g => String(g.id) === String(savedZone.id));
   if (existingIdx >= 0) {
@@ -121,7 +143,7 @@ export async function createGeofence(zoneData, deviceKey = getActiveDeviceKey())
   // 3. Optional async sync with Cloudflare Worker
   if (API_BASE) {
     try {
-      fetch(`${API_BASE}/api/devices/${encodeURIComponent(deviceKey)}/geofences`, {
+      fetch(`${API_BASE}/api/devices/${encodeURIComponent(effectiveKey)}/geofences`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(savedZone),
@@ -130,30 +152,30 @@ export async function createGeofence(zoneData, deviceKey = getActiveDeviceKey())
   }
 
   if (fbResult && !fbResult.ok) {
-    // If Firebase write errored with actionable message, throw or report so caller handles gracefully
     console.warn('[CareTag API] Firebase save warning:', fbResult.error);
   }
 
   return savedZone;
 }
 
-export async function postGeofence(deviceKey = getActiveDeviceKey(), body) {
+export async function postGeofence(deviceKey = getActiveDeviceKey(), body, userId = null) {
   // Support both (deviceKey, body) and (body) parameter signatures
   if (typeof deviceKey === 'object' && body === undefined) {
-    return createGeofence(deviceKey, getActiveDeviceKey());
+    return createGeofence(deviceKey, getActiveDeviceKey(), userId);
   }
-  return createGeofence(body, deviceKey);
+  return createGeofence(body, deviceKey, userId);
 }
 
 /**
- * Updates an existing safe zone in Firebase and LocalStorage.
+ * Updates an existing safe zone in Firebase and LocalStorage across all paths.
  */
-export async function updateGeofence(id, updates, deviceKey = getActiveDeviceKey()) {
-  const uid = getUserId();
+export async function updateGeofence(id, updates, deviceKey = getActiveDeviceKey(), userId = null) {
+  const uid = userId || updates.userId || getUserId();
+  const effectiveKey = deviceKey || getActiveDeviceKey();
   const zoneId = String(id);
 
-  // 1. Update in Firebase RTDB
-  const fbResult = await updateSafeZoneInFirebase(deviceKey, zoneId, updates);
+  // 1. Update in Firebase RTDB across all endpoints
+  const fbResult = await updateSafeZoneInFirebase(effectiveKey, zoneId, updates, uid);
 
   // 2. Update in LocalStorage
   const localList = loadLocalGeofences(uid);
@@ -179,12 +201,12 @@ export async function updateGeofence(id, updates, deviceKey = getActiveDeviceKey
 }
 
 /**
- * Deletes a safe zone from Firebase and LocalStorage.
+ * Deletes a safe zone from Firebase and LocalStorage across all paths.
  */
-export async function deleteGeofence(deviceKeyOrId, optionalId) {
-  const uid = getUserId();
+export async function deleteGeofence(deviceKeyOrId, optionalId, userId = null) {
   let deviceKey = getActiveDeviceKey();
   let id = deviceKeyOrId;
+  let uid = userId || getUserId();
 
   if (optionalId !== undefined) {
     deviceKey = deviceKeyOrId;
@@ -197,8 +219,8 @@ export async function deleteGeofence(deviceKeyOrId, optionalId) {
   const list = loadLocalGeofences(uid).filter(g => String(g.id) !== zoneId);
   saveLocalGeofences(uid, list);
 
-  // 2. Delete from Firebase RTDB
-  await deleteSafeZoneFromFirebase(deviceKey, zoneId).catch(() => {});
+  // 2. Delete from Firebase RTDB across user, device, and shared endpoints
+  await deleteSafeZoneFromFirebase(deviceKey, zoneId, uid).catch(() => {});
 
   // 3. Optional delete on Cloudflare Worker
   if (API_BASE) {
@@ -215,26 +237,25 @@ export async function deleteGeofence(deviceKeyOrId, optionalId) {
 
 /**
  * Fetches all safe zones for the current user and device.
- * Merges Firebase RTDB data with local cache for instant rendering and durability.
+ * Merges Firebase RTDB data across device, user-specific, and shared endpoints
+ * with local cache for instant rendering and cross-user visibility.
  */
-export async function fetchGeofences(deviceKey = getActiveDeviceKey()) {
-  const uid = getUserId();
+export async function fetchGeofences(deviceKey = getActiveDeviceKey(), userId = null) {
+  const uid = userId || getUserId();
   const localList = loadLocalGeofences(uid);
 
   try {
-    // 1. Fetch from Firebase RTDB
-    const fbList = await fetchSafeZonesFromFirebase(deviceKey);
+    // 1. Fetch from Firebase RTDB (cross-references device, user, and shared records)
+    const fbList = await fetchSafeZonesFromFirebase(deviceKey, uid);
 
     if (Array.isArray(fbList) && fbList.length > 0) {
-      // Index by id
       const fbMap = new Map(fbList.map(z => [String(z.id), z]));
       // Merge local zones not yet on Firebase
       const merged = [...fbList];
       for (const lz of localList) {
         if (!fbMap.has(String(lz.id))) {
           merged.push(lz);
-          // Sync missing zone to Firebase in background
-          saveSafeZoneToFirebase(deviceKey, lz).catch(() => {});
+          saveSafeZoneToFirebase(deviceKey, lz, uid).catch(() => {});
         }
       }
       saveLocalGeofences(uid, merged);
@@ -244,7 +265,7 @@ export async function fetchGeofences(deviceKey = getActiveDeviceKey()) {
     // 2. If Firebase returned empty but we have local zones, push them to Firebase
     if (localList.length > 0) {
       for (const zone of localList) {
-        saveSafeZoneToFirebase(deviceKey, zone).catch(() => {});
+        saveSafeZoneToFirebase(deviceKey, zone, uid).catch(() => {});
       }
       return localList;
     }
@@ -254,6 +275,21 @@ export async function fetchGeofences(deviceKey = getActiveDeviceKey()) {
     console.warn('[CareTag API] fetchGeofences fallback to local cache:', err);
     return localList;
   }
+}
+
+/**
+ * Subscribes to real-time safe zone updates from Firebase RTDB.
+ * When any caregiver creates, updates, or deletes a safe place,
+ * this notifies listeners so everyone's dashboard is instantly synchronized.
+ */
+export function subscribeSafeZones(deviceKey = getActiveDeviceKey(), userId = null, onZonesUpdated) {
+  const uid = userId || getUserId();
+  return subscribeSafeZonesFirebase(deviceKey, uid, (freshList) => {
+    saveLocalGeofences(uid, freshList);
+    if (typeof onZonesUpdated === 'function') {
+      onZonesUpdated(freshList);
+    }
+  });
 }
 
 // ── Telemetry & Cloudflare Endpoints ──
@@ -311,6 +347,7 @@ const api = {
   updateGeofence,
   deleteGeofence,
   fetchGeofences,
+  subscribeSafeZones,
   getActiveDeviceKey,
   fetchLatestPacket,
   sendTelemetryPacket,

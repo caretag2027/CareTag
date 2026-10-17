@@ -23,8 +23,10 @@ const teamMembers = [
  * CareTag Blue (#2563EB), Mint/Teal (#14B8A6), ample vertical spacing,
  * and clear visual hierarchy.
  */
-export default function LandingPage({ onLaunchDashboard, onOpenAuth }) {
+export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) {
   const [scrolled, setScrolled] = useState(false);
+  const userName = session?.childName || session?.name || 'Bhavishya Singla';
+  const userInitial = (userName.trim().charAt(0) || 'B').toUpperCase();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -58,20 +60,32 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth }) {
 
           {/* Actions on the right */}
           <div className="floating-actions">
-            <button
-              type="button"
-              className="floating-signin-link"
-              onClick={onOpenAuth}
-            >
-              Sign in
-            </button>
+            {session ? (
+              <button
+                type="button"
+                className="floating-signin-link floating-user-pill"
+                onClick={onLaunchDashboard}
+                title={`Signed in as ${userName}`}
+              >
+                <span className="header-avatar-circle">{userInitial}</span>
+                <span>{userName}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="floating-signin-link"
+                onClick={onOpenAuth}
+              >
+                Sign in
+              </button>
+            )}
 
             <button
               type="button"
               className="btn-floating-pill-cta"
               onClick={onLaunchDashboard}
             >
-              <span>Open dashboard</span>
+              <span>{session ? 'Go to Dashboard' : 'Open dashboard'}</span>
               <ArrowRight size={14} />
             </button>
           </div>
@@ -267,6 +281,16 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth }) {
               <p className="taggy-strip-desc">
                 Friendly guidance for safe-place setup, wearable telemetry status, and contextual safety notifications.
               </p>
+              <button
+                type="button"
+                className="taggy-strip-btn"
+                onClick={() => window.dispatchEvent(new CustomEvent('caretag:open-taggy'))}
+                title="Chat with Taggy"
+              >
+                <Sparkles size={14} />
+                <span>Ask Taggy a Question</span>
+                <ArrowRight size={14} />
+              </button>
             </div>
           </div>
         </div>

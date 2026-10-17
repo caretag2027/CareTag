@@ -4,7 +4,7 @@ import {
   Shield, ShieldCheck,
   Radio, Clock,
   Check, Terminal, Sliders, Maximize2, Minimize2,
-  Navigation
+  Navigation, X
 } from 'lucide-react';
 import {
   Circle, MapContainer, Marker, Popup, TileLayer, useMap, Polyline, useMapEvents
@@ -34,7 +34,8 @@ import {
   getDeviceStatusMeta,
   DEVICE_STATUS,
   isScheduleActive,
-  evaluateSafetyState
+  evaluateSafetyState,
+  getZoneCategoryColor
 } from './utils/dashboardUtils';
 
 /* ──────────────────────────────────────────────────────────────
@@ -176,11 +177,18 @@ function App() {
   return (
     <>
       {view === 'landing' && (
-        <LandingPage
-          onLaunchDashboard={handleLaunchDashboard}
-          onOpenAuth={() => setView('auth')}
-          session={session}
-        />
+        <>
+          <LandingPage
+            onLaunchDashboard={handleLaunchDashboard}
+            onOpenAuth={() => setView('auth')}
+            session={session}
+          />
+          <TaggyChatbot
+            currentView="landing"
+            onLaunchDashboard={handleLaunchDashboard}
+            onOpenAuth={() => setView('auth')}
+          />
+        </>
       )}
 
       {view === 'auth' && (
@@ -289,7 +297,7 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
   // Load Geofences and Routine data from Firebase & local stores
   const loadData = useCallback(async () => {
     try {
-      const list = await api.fetchGeofences(deviceKey);
+      const list = await api.fetchGeofences(deviceKey, userId);
       setGeofences(list || []);
 
       // Load routine history and profile from Firebase RTDB
@@ -311,6 +319,20 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // ── Real-Time Safe Places Synchronization across users & devices ──
+  useEffect(() => {
+    let mounted = true;
+    const unsubscribe = api.subscribeSafeZones(deviceKey, userId, (updatedList) => {
+      if (mounted && Array.isArray(updatedList) && updatedList.length > 0) {
+        setGeofences(updatedList);
+      }
+    });
+    return () => {
+      mounted = false;
+      if (unsubscribe) unsubscribe();
+    };
+  }, [deviceKey, userId]);
 
   // ── Live Hardware Telemetry Subscription (Firebase RTDB) ──
   useEffect(() => {
@@ -479,7 +501,7 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
   // ── Safe Zone Management Handlers ──
   const handleSaveGeofence = async (zoneData) => {
     try {
-      const created = await api.createGeofence(zoneData, deviceKey);
+      const created = await api.createGeofence(zoneData, deviceKey, userId);
       setGeofences(prev => {
         const idx = prev.findIndex(g => String(g.id) === String(created.id));
         if (idx >= 0) {
@@ -501,7 +523,7 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
 
   const handleUpdateGeofence = async (id, updates) => {
     try {
-      const updated = await api.updateGeofence(id, updates, deviceKey);
+      const updated = await api.updateGeofence(id, updates, deviceKey, userId);
       setGeofences(prev => prev.map(g => String(g.id) === String(id) ? { ...g, ...updated } : g));
       pushToast('Safe place updated.', 'success');
       return updated;
@@ -513,7 +535,7 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
 
   const handleDeleteGeofence = async (id) => {
     try {
-      await api.deleteGeofence(deviceKey, id);
+      await api.deleteGeofence(deviceKey, id, userId);
       setGeofences(prev => prev.filter(g => String(g.id) !== String(id)));
       if (selectedZoneId === id) setSelectedZoneId(null);
       pushToast('Safe place removed.', 'info');
@@ -837,13 +859,7 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
               const isEnabled = zone.enabled !== false && zone.isActive !== false;
               const isScheduled = isScheduleActive(zone.schedule);
 
-              const color = !isEnabled
-                ? '#94A3B8'
-                : !isScheduled
-                ? '#64748B'
-                : (zone.category === 'home' || (zone.label || '').toLowerCase().includes('home'))
-                ? '#0D9488'
-                : '#2563EB';
+              const color = getZoneCategoryColor(zone.category || zone.label, isEnabled, isScheduled);
 
               return (
                 <Circle
@@ -1080,16 +1096,27 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
                   <Bell size={18} className="text-teal" />
                   <h2>Safety Alerts &amp; Event Log</h2>
                 </div>
-                {alerts.some(a => !a.acknowledged) && (
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {alerts.some(a => !a.acknowledged) && (
+                    <button
+                      type="button"
+                      className="alerts-ack-all-btn"
+                      onClick={handleAcknowledgeAll}
+                    >
+                      <Check size={13} />
+                      <span>Acknowledge All</span>
+                    </button>
+                  )}
                   <button
                     type="button"
-                    className="alerts-ack-all-btn"
-                    onClick={handleAcknowledgeAll}
+                    className="tech-close-btn"
+                    onClick={() => setActiveTab('overview')}
+                    aria-label="Back to Overview"
+                    title="Back to Overview"
                   >
-                    <Check size={13} />
-                    <span>Acknowledge All</span>
+                    <X size={16} />
                   </button>
-                )}
+                </div>
               </div>
 
               {alerts.length === 0 ? (
@@ -1158,6 +1185,8 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
               hardwareStatus={hardwareStatus}
               simRunning={simRunning}
               isLiveHardwareMode={isLiveHardwareMode}
+              routineProfile={routineProfile}
+              routineHistory={routineHistory}
               onRecenterMap={() => {
                 if (latest) setFlyToTarget({ latlng: [latest.lat, latest.lng], timestamp: Date.now() });
               }}
@@ -1193,6 +1222,12 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
         simRunning={simRunning}
         onNavigateTab={(tab) => setActiveTab(tab)}
         onOpenInspector={() => setActiveTab('inspector')}
+        onRecenterMap={() => {
+          if (latest) {
+            setFlyToTarget({ latlng: [latest.lat, latest.lng], timestamp: Date.now() });
+            pushToast('Centered map on child location', 'info');
+          }
+        }}
       />
     </div>
   );

@@ -603,6 +603,8 @@ export default function SafeZoneManager({
 
             const radiusKm = (zone.radiusMeters || 500) / 1000;
             const isInside = distanceKm != null ? distanceKm <= radiusKm : false;
+            const catMeta = CATEGORIES.find(c => c.id === zone.category) || CATEGORIES[0];
+            const CatIcon = catMeta.icon || MapPin;
 
             return (
               <div
@@ -616,7 +618,7 @@ export default function SafeZoneManager({
                 <div className="safezone-card-top">
                   <div className="safezone-card-title-group">
                     <div className={`zone-category-badge zone-category--${zone.category || 'home'}`}>
-                      <MapPin size={14} />
+                      <CatIcon size={15} />
                     </div>
                     <div>
                       <h4 className="zone-name">{zone.label || zone.name}</h4>
