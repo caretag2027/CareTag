@@ -278,4 +278,18 @@ describe('TaggyChatbot Component', () => {
 
     expect(screen.getByRole('dialog', { name: /taggy ai companion chat/i })).toBeInTheDocument();
   });
+
+  test('answers teacher/faculty mentor inquiry with both Dr. Kapil Tomar and Dr. Ravindra Kumar', async () => {
+    render(<TaggyChatbot currentView="landing" />);
+    fireEvent.click(screen.getByRole('button', { name: /open taggy ai chatbot/i }));
+
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, { target: { value: 'Who is the teacher or faculty mentor for this project?' } });
+    fireEvent.submit(input.closest('form'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Dr\. Kapil Tomar/i)).toBeInTheDocument();
+      expect(screen.getByText(/Dr\. Ravindra Kumar/i)).toBeInTheDocument();
+    });
+  });
 });

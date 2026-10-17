@@ -66,7 +66,7 @@ PRODUCT OVERVIEW FOR PROSPECTIVE CAREGIVERS & JUDGES:
 - Key Advantage: Dual-check routine intelligence. Unlike standard GPS trackers that only alert on static circles, CareTag learns habitual daily transit corridors and stay-points across 48 daily 30-minute intervals. It suppresses false alarms from GPS drift (45m spatial hysteresis, temporal smoothing) and catches abnormal deviations early.
 - Battery Life: 18–24 hours with dynamic sleep scheduling (sleeps during static dwell times, wakes on movement).
 - Privacy: TLS encrypted end-to-end telemetry, private isolated accounts, zero third-party tracking.
-- Team: Kinjal, Guneev Taneja, Bhavishya Singla, Manya Sharma, Anureet (Mentored by Dr. Kapil Tomar).
+- Team: Kinjal, Guneev Taneja, Bhavishya Singla, Manya Sharma, Anureet (Mentored by Dr. Kapil Tomar & Dr. Ravindra Kumar).
 
 RESPONSE GUIDELINES:
 - Keep answers concise, clear, and welcoming (strictly 40 to 80 words).
@@ -94,20 +94,17 @@ RESPONSE GUIDELINES:
   return `You are Taggy, the caregiver-first AI companion for CareTag (a smart child safety & routine monitoring wearable dashboard).
 
 CRITICAL CAREGIVER-FIRST RESPONSE POLICY:
-- Your primary audience is caregivers (parents and guardians). They want to know where their child is, how to configure safe places, what an alert means, and what to do next.
-- DO NOT automatically explain underlying engineering, LSTM models, sensor part numbers, math formulas, or datasets in ordinary answers.
-- Keep answers SHORT, clear, and reassuring (strictly 30 to 70 words total for ordinary questions).
-- Follow this structure:
-  1. Direct answer: 1 to 2 clear, everyday sentences.
-  2. Helpful next step: up to 3 concise, numbered steps or actions if relevant.
-  3. Optional technical details: Only if deeper context is genuinely relevant, wrap it in:
-     <details>
-     <summary>How does this work technically?</summary>
-     [Brief engineering explanation. Mention that full telemetry is in the Technical Inspector.]
-     </details>
-- Never guarantee safety (e.g. do not claim "your child is 100% safe" or that geofences prevent incidents).
-- If telemetry is stale or device offline, be honest and remind the caregiver that the displayed location may not be live.
-- Do not repeat the user's question. Do not append generic conversational fillers like "How else can I help?" at the end.
+- Your primary audience is caregivers (parents and guardians). They want clear, reassuring answers on child location, safe places, alerts, and wearable operation.
+- Write naturally in concise, high-quality, conversational English (strictly 35 to 75 words).
+- DO NOT force artificial numbered lists. Only provide numbered steps if the caregiver specifically asks for instructions or how-to procedures.
+- Optional technical depth: If engineering details (sensors, LSTM, formulas, encryption) are relevant, wrap them neatly in:
+  <details>
+  <summary>How does this work technically?</summary>
+  [Clear, high-signal engineering explanation. Mention that live telemetry is accessible in the Technical Inspector.]
+  </details>
+- Never guarantee 100% safety. Maintain honest, reliable communication.
+- If telemetry is stale or device offline, honestly remind the caregiver that the displayed position may not be current.
+- Do not repeat the user's question verbatim. Do not append generic conversational fillers like "How else can I help?" at the end.
 
 EXPLICIT TECHNICAL QUERIES:
 If the user specifically asks technical questions (e.g., "How does the AI model work?", "What is the deviation formula?", "Which sensors are installed?"):
@@ -340,14 +337,14 @@ function parseMessageContent(text = '') {
   let techDetails = null;
   let techSummary = 'How does this work technically?';
 
-  // Support <details><summary>...</summary>...</details>
-  const detailsRegex = /<details[^>]*>\s*<summary>(.*?)<\/summary>(.*?)<\/details>/s;
+  // Support <details><summary>...</summary>...</details> or unclosed trailing tags
+  const detailsRegex = /<details[^>]*>\s*<summary>(.*?)<\/summary>(.*?)(?:<\/details>|$)/s;
   const detailsMatch = text.match(detailsRegex);
 
   if (detailsMatch) {
     mainText = text.replace(detailsRegex, '').trim();
     techSummary = detailsMatch[1].trim() || 'How does this work technically?';
-    techDetails = detailsMatch[2].trim();
+    techDetails = detailsMatch[2].replace(/<\/details>/gi, '').trim();
   } else {
     // Also support :::tech [Summary] ... ::: syntax
     const techBlockRegex = /:::tech(?:\s*\[(.*?)\])?\s*(.*?):::/s;
@@ -358,6 +355,9 @@ function parseMessageContent(text = '') {
       techDetails = techMatch[2].trim();
     }
   }
+
+  // Strip any stray raw details tags from mainText
+  mainText = mainText.replace(/<\/?details[^>]*>/gi, '').replace(/<\/?summary[^>]*>/gi, '').trim();
 
   return { mainText, techDetails, techSummary };
 }
@@ -390,15 +390,15 @@ function TechDisclosure({ summary, content, onOpenInspector }) {
         className="taggy-tech-toggle-btn"
         onClick={() => setIsExpanded(prev => !prev)}
         aria-expanded={isExpanded}
-        title={isExpanded ? 'Collapse technical details' : 'Expand technical details'}
+        title={isExpanded ? 'Hide technical details' : 'Show technical details'}
       >
         <span className="taggy-tech-label">
-          <Settings size={12} className="taggy-tech-icon" />
+          <Settings size={13} className="taggy-tech-icon" />
           <span>{summary}</span>
         </span>
         <span className="taggy-tech-action">
           <span className="taggy-tech-action-text">{isExpanded ? 'Hide' : 'Expand'}</span>
-          <ChevronDown size={12} className={`taggy-chevron ${isExpanded ? 'rotated' : ''}`} />
+          <ChevronDown size={13} className={`taggy-chevron ${isExpanded ? 'rotated' : ''}`} />
         </span>
       </button>
 
@@ -409,10 +409,13 @@ function TechDisclosure({ summary, content, onOpenInspector }) {
             <button
               type="button"
               className="taggy-inspector-btn"
-              onClick={onOpenInspector}
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenInspector();
+              }}
             >
               <span>View live telemetry in Technical Inspector</span>
-              <ExternalLink size={11} />
+              <ExternalLink size={12} />
             </button>
           )}
         </div>
@@ -477,10 +480,10 @@ function getDomainOfflineAnswer(query = '', appState = {}) {
   const q = query.toLowerCase();
 
   // Team & Authors & University
-  if (/(team|who\s+(made|built|created|designed|developed)|authors|mentor|kapil\s+tomar|thapar|bhavishya|guneev|kinjal|manya|anureet)/i.test(q)) {
+  if (/(team|who\s+(made|built|created|designed|developed)|authors|mentor|teacher|faculty|guide|kapil|tomar|ravindra|ravinder|kumar|thapar|bhavishya|guneev|kinjal|manya|anureet)/i.test(q)) {
     return `CareTag was developed as a university capstone project at **Thapar Institute of Engineering & Technology** (Batch of 2027) by:
 - **Core Team:** Kinjal, Guneev Taneja, Bhavishya Singla, Manya Sharma, and Anureet.
-- **Faculty Mentor:** Dr. Kapil Tomar.
+- **Faculty Mentors:** Dr. Kapil Tomar and Dr. Ravindra Kumar (Associate Professors, CSED).
 
 The team combined low-power IoT hardware engineering with machine learning routine monitoring to create an accessible, caregiver-focused safety wearable.`;
   }
@@ -935,6 +938,35 @@ Click **Sign In** below to proceed to the caregiver login page.`,
     setIsLoading(false);
   };
 
+  // Resilient handler to navigate to Technical Inspector & manage chatbot layout
+  const handleOpenInspectorClick = () => {
+    if (onOpenInspector) {
+      onOpenInspector();
+    } else if (onNavigateTab) {
+      onNavigateTab('inspector');
+    } else if (onLaunchDashboard) {
+      onLaunchDashboard('inspector');
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('caretag:navigate-tab', { detail: 'inspector' }));
+      
+      setIsExpanded(false);
+      // Close overlay on smaller screens so the inspector view is immediately visible
+      if (window.innerWidth < 1024) {
+        setIsOpen(false);
+      }
+
+      // Smooth scroll to the Technical Inspector drawer or content pane
+      setTimeout(() => {
+        const inspectorEl = document.querySelector('.tech-inspector-drawer') || document.querySelector('.caretag-content-pane');
+        if (inspectorEl) {
+          inspectorEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 120);
+    }
+  };
+
   // 4 Primary Starter Questions for Quick Selection based on currentView
   const starterQuestions = (currentView === 'landing' ? MARKETING_PRESETS : CAREGIVER_PRESETS).slice(0, 4);
 
@@ -1069,7 +1101,7 @@ Click **Sign In** below to proceed to the caregiver login page.`,
                         <TechDisclosure
                           summary={techSummary}
                           content={techDetails}
-                          onOpenInspector={onOpenInspector}
+                          onOpenInspector={handleOpenInspectorClick}
                         />
                       )}
 
@@ -1080,7 +1112,9 @@ Click **Sign In** below to proceed to the caregiver login page.`,
                             type="button"
                             className="taggy-action-pill-btn"
                             onClick={() => {
-                              if (msg.actionTab && onNavigateTab) {
+                              if (msg.actionTab === 'inspector' || msg.actionType === 'open_inspector') {
+                                handleOpenInspectorClick();
+                              } else if (msg.actionTab && onNavigateTab) {
                                 onNavigateTab(msg.actionTab);
                               } else if (msg.actionType === 'recenter_map' && onRecenterMap) {
                                 onRecenterMap();
@@ -1088,8 +1122,6 @@ Click **Sign In** below to proceed to the caregiver login page.`,
                                 onLaunchDashboard();
                               } else if (msg.actionType === 'open_auth' && onOpenAuth) {
                                 onOpenAuth();
-                              } else if (msg.actionType === 'open_inspector' && onOpenInspector) {
-                                onOpenInspector();
                               }
                             }}
                           >
@@ -1098,7 +1130,7 @@ Click **Sign In** below to proceed to the caregiver login page.`,
                             {msg.actionType === 'recenter_map' && <Crosshair size={11} />}
                             {msg.actionType === 'launch_demo' && <Sparkles size={11} />}
                             {msg.actionType === 'open_auth' && <User size={11} />}
-                            {msg.actionType === 'open_inspector' && <Settings size={11} />}
+                            {(msg.actionTab === 'inspector' || msg.actionType === 'open_inspector') && <Settings size={11} />}
                             <span>{msg.actionLabel || 'View'}</span>
                             <ArrowRight size={10} />
                           </button>

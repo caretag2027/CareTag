@@ -118,14 +118,117 @@ export function acknowledgeAll(userId) {
   try { localStorage.setItem(key, JSON.stringify(alerts)); } catch {}
 }
 
+/**
+ * Load alerts scoped to a specific device.
+ */
+export function loadDeviceAlerts(userId, deviceKey) {
+  const all = loadAlerts(userId);
+  if (!deviceKey) return all;
+  return all.filter(a => a.deviceId === deviceKey || a.deviceKey === deviceKey);
+}
+
+// ── Trip Mode Management ──
+// Suppresses routine-deviation alerts while caregiver travels with child.
+
+export function getTripMode(userId, deviceKey) {
+  if (!userId) return { active: false, expiresAt: null, durationMinutes: 0 };
+  try {
+    const key = userKey(userId, `tripMode.${deviceKey || 'default'}`);
+    const raw = localStorage.getItem(key);
+    if (!raw) return { active: false, expiresAt: null, durationMinutes: 0 };
+    const parsed = JSON.parse(raw);
+    if (parsed.active && parsed.expiresAt && Date.now() < parsed.expiresAt) {
+      const remainingMinutes = Math.max(0, Math.ceil((parsed.expiresAt - Date.now()) / (60 * 1000)));
+      return {
+        active: true,
+        expiresAt: parsed.expiresAt,
+        durationMinutes: parsed.durationMinutes,
+        remainingMinutes,
+        formattedRemaining: remainingMinutes >= 60 ? `${Math.floor(remainingMinutes / 60)}h ${remainingMinutes % 60}m` : `${remainingMinutes}m`,
+      };
+    }
+    // Expired
+    clearTripMode(userId, deviceKey);
+    return { active: false, expiresAt: null, durationMinutes: 0 };
+  } catch {
+    return { active: false, expiresAt: null, durationMinutes: 0 };
+  }
+}
+
+export function setTripMode(userId, deviceKey, durationMinutes = 60) {
+  if (!userId) return false;
+  try {
+    const key = userKey(userId, `tripMode.${deviceKey || 'default'}`);
+    const expiresAt = Date.now() + (durationMinutes * 60 * 1000);
+    const data = {
+      active: true,
+      durationMinutes,
+      expiresAt,
+      activatedAt: Date.now(),
+    };
+    localStorage.setItem(key, JSON.stringify(data));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function clearTripMode(userId, deviceKey) {
+  if (!userId) return;
+  try {
+    const key = userKey(userId, `tripMode.${deviceKey || 'default'}`);
+    localStorage.removeItem(key);
+  } catch {}
+}
+
+// ── Alert Preferences (Audible, Voice, Deviation, Notifications) ──
+
+export function getAlertPreferences(userId, deviceKey) {
+  const defaults = {
+    deviationAlerts: true,
+    voiceAlarms: true,
+    audibleBeeps: true,
+    browserNotifications: false,
+    boundaryBreach: true,
+  };
+  if (!userId) return defaults;
+  try {
+    const key = userKey(userId, `alertPrefs.${deviceKey || 'default'}`);
+    const raw = localStorage.getItem(key);
+    if (!raw) return defaults;
+    return { ...defaults, ...JSON.parse(raw) };
+  } catch {
+    return defaults;
+  }
+}
+
+export function saveAlertPreferences(userId, deviceKey, updates) {
+  if (!userId) return;
+  try {
+    const current = getAlertPreferences(userId, deviceKey);
+    const updated = { ...current, ...updates };
+    const key = userKey(userId, `alertPrefs.${deviceKey || 'default'}`);
+    localStorage.setItem(key, JSON.stringify(updated));
+    return updated;
+  } catch {
+    return updates;
+  }
+}
+
 export const alertStore = {
   saveAlert,
   addAlert: saveAlert,
   loadAlerts,
+  loadDeviceAlerts,
   getRecentAlerts,
   getUnacknowledgedCount,
   acknowledgeAlert,
   acknowledgeAll,
+  getTripMode,
+  setTripMode,
+  clearTripMode,
+  getAlertPreferences,
+  saveAlertPreferences,
   ALERT_CATEGORIES,
 };
 

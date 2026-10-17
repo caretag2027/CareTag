@@ -565,7 +565,8 @@ export function subscribeHardwareTelemetry(onPacket, onStatusChange, options = {
 
   if (db) {
     try {
-      dbRef = ref(db, 'sensorData');
+      const sensorPath = options.path || (options.deviceKey && options.deviceKey !== 'CARE-TAG-01' ? `devices/${options.deviceKey}/sensorData` : 'sensorData');
+      dbRef = ref(db, sensorPath);
       connectedRef = ref(db, '.info/connected');
       let hasConnectedBefore = false;
 
@@ -645,7 +646,8 @@ export function subscribeHardwareTelemetry(onPacket, onStatusChange, options = {
         }
 
         // Direct Firebase REST endpoint
-        const restUrl = `${FIREBASE_CONFIG.databaseURL}/sensorData.json`;
+        const restPath = options.path || (options.deviceKey && options.deviceKey !== 'CARE-TAG-01' ? `devices/${options.deviceKey}/sensorData` : 'sensorData');
+        const restUrl = `${FIREBASE_CONFIG.databaseURL}/${restPath}.json`;
         res = await fetch(restUrl, { cache: 'no-store' });
         if (res && res.ok) {
           const raw = await res.json();

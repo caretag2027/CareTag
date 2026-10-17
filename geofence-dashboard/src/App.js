@@ -4,7 +4,8 @@ import {
   Shield, ShieldCheck,
   Radio, Clock,
   Check, Terminal, Sliders, Maximize2, Minimize2,
-  Navigation, X
+  Navigation, X, ChevronDown, Car, Smartphone,
+  Plus
 } from 'lucide-react';
 import {
   Circle, MapContainer, Marker, Popup, TileLayer, useMap, Polyline, useMapEvents
@@ -13,8 +14,9 @@ import L from 'leaflet';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import api from './api';
 import simulation, { SCENARIO_PRESETS } from './simulation';
-import auth from './auth';
+import auth, { DEDICATED_ACCOUNTS } from './auth';
 import alertStore from './alertStore';
+import deviceStore from './deviceStore';
 import CareTagLogo from './components/CareTagLogo';
 import LandingPage from './components/LandingPage';
 import TaggyChatbot from './components/TaggyChatbot';
@@ -158,6 +160,7 @@ function MapResizeHandler({ isMapExpanded }) {
 function App() {
   const [session, setSession] = useState(() => auth.getSession());
   const [view, setView] = useState('landing');
+  const [dashboardInitialTab, setDashboardInitialTab] = useState('overview');
 
   // Enforce private dashboard isolation: redirect to auth if attempting to access dashboard unauthenticated
   useEffect(() => {
@@ -166,11 +169,50 @@ function App() {
     }
   }, [view, session]);
 
-  const handleLaunchDashboard = () => {
+  const handleLaunchDashboard = (targetTab = 'overview') => {
+    setDashboardInitialTab(targetTab);
     if (session) {
       setView('dashboard');
     } else {
       setView('auth');
+    }
+  };
+
+  const handleOpenInspector = () => {
+    // If not authenticated, automatically authenticate as primary demo evaluator so the visitor can immediately experience live telemetry without a login wall
+    if (!session) {
+      const demoAccount = DEDICATED_ACCOUNTS && DEDICATED_ACCOUNTS.length > 0
+        ? DEDICATED_ACCOUNTS[0]
+        : {
+            id: 'usr_singla_be23',
+            name: 'Bhavishya Singla',
+            email: 'singla_be23@thapar.edu',
+            role: 'admin',
+            deviceKey: 'CARE-TAG-01'
+          };
+      const demoSession = {
+        userId: demoAccount.id,
+        name: demoAccount.name,
+        email: demoAccount.email,
+        role: demoAccount.role || 'admin',
+        deviceKey: demoAccount.deviceKey || 'CARE-TAG-01',
+        department: demoAccount.department || 'Computer Engineering (BE23)',
+        institution: demoAccount.institution || 'Thapar Institute of Engineering & Technology',
+        backend: 'demo-evaluator',
+      };
+      localStorage.setItem('caretag.session', JSON.stringify(demoSession));
+      setSession(demoSession);
+    }
+    setDashboardInitialTab('inspector');
+    setView('dashboard');
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('caretag:navigate-tab', { detail: 'inspector' }));
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('caretag:navigate-tab', { detail: 'inspector' }));
+        const el = document.querySelector('.tech-inspector-drawer') || document.querySelector('.caretag-content-pane');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 150);
     }
   };
 
@@ -181,12 +223,14 @@ function App() {
           <LandingPage
             onLaunchDashboard={handleLaunchDashboard}
             onOpenAuth={() => setView('auth')}
+            onOpenInspector={handleOpenInspector}
             session={session}
           />
           <TaggyChatbot
             currentView="landing"
             onLaunchDashboard={handleLaunchDashboard}
             onOpenAuth={() => setView('auth')}
+            onOpenInspector={handleOpenInspector}
           />
         </>
       )}
@@ -204,6 +248,7 @@ function App() {
       {view === 'dashboard' && session && (
         <Dashboard
           session={session}
+          initialTab={dashboardInitialTab}
           onLogout={() => {
             auth.logout();
             setSession(null);
@@ -222,14 +267,54 @@ function App() {
    CareTag Redesigned Dashboard Component
    ────────────────────────────────────────────────────────────── */
 
-function Dashboard({ session, onLogout, onGoToLanding }) {
+function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }) {
   const userId = session.userId;
-  const deviceKey = session.deviceKey || 'CARE-TAG-01';
 
-  // Dynamic profile metadata derived from authenticated session
-  const monitoredName = session?.childName || session?.monitoredName || session?.name || 'Monitored Profile';
+  // ── Multi-Device & Profile Management ──
+  const [devicesList, setDevicesList] = useState(() => deviceStore.loadUserDevices(userId));
+  const [selectedDeviceKey, setSelectedDeviceKey] = useState(() => deviceStore.getActiveDeviceKey(userId, session.deviceKey || 'CARE-TAG-01'));
+  const [isDeviceMenuOpen, setIsDeviceMenuOpen] = useState(false);
+  const [showLinkDeviceModal, setShowLinkDeviceModal] = useState(false);
+  const [newDeviceKeyInput, setNewDeviceKeyInput] = useState('');
+  const [newChildNameInput, setNewChildNameInput] = useState('');
+  const [newAgeInput, setNewAgeInput] = useState('8');
+  const [newRelationInput, setNewRelationInput] = useState('Child');
+  const [linkError, setLinkError] = useState('');
+
+  // Active Profile metadata derived from selected wearable device
+  const activeProfile = devicesList.find(d => d.deviceKey === selectedDeviceKey) || devicesList[0] || {
+    deviceKey: selectedDeviceKey,
+    childName: session?.childName || 'Monitored Profile',
+    relation: 'Child',
+    avatarColor: '#2563EB',
+    hardwareModel: 'ESP32 Smart Band',
+  };
+  const monitoredName = activeProfile.childName;
   const monitoredInitial = (monitoredName.trim().charAt(0) || 'C').toUpperCase();
-  const deviceDisplayName = session?.deviceDisplayName || `${monitoredName.split(' ')[0]}'s Smart Band`;
+  const deviceDisplayName = `${monitoredName.split(' ')[0]}'s Smart Band (${selectedDeviceKey})`;
+
+  // ── Trip Mode & Alert Preferences State ──
+  const [tripMode, setTripModeState] = useState(() => alertStore.getTripMode(userId, selectedDeviceKey));
+
+  // Periodic heartbeat checking for Trip Mode auto-expiration
+  useEffect(() => {
+    setTripModeState(alertStore.getTripMode(userId, selectedDeviceKey));
+    const timer = setInterval(() => {
+      setTripModeState(alertStore.getTripMode(userId, selectedDeviceKey));
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [userId, selectedDeviceKey]);
+
+  const handleSetTripMode = useCallback((durationMinutes = 60) => {
+    alertStore.setTripMode(userId, selectedDeviceKey, durationMinutes);
+    const updated = alertStore.getTripMode(userId, selectedDeviceKey);
+    setTripModeState(updated);
+  }, [userId, selectedDeviceKey]);
+
+  const handleEndTripMode = useCallback(() => {
+    alertStore.clearTripMode(userId, selectedDeviceKey);
+    setTripModeState({ active: false, expiresAt: null, durationMinutes: 0 });
+  }, [userId, selectedDeviceKey]);
 
   // ── Core Data state ──
   const [latest, setLatest] = useState(null);
@@ -242,7 +327,7 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
     connected: false,
     isHardwareStreaming: false,
     isStale: false,
-    statusText: 'CONNECTING TO SMART BAND...',
+    statusText: `CONNECTING TO ${selectedDeviceKey}...`,
     batteryPercent: 92,
   });
 
@@ -251,8 +336,8 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
   const [activeScenario, setActiveScenario] = useState(null);
   const [simulatedAlerts, setSimulatedAlerts] = useState([]);
 
-  // ── Alerts & Telemetry stores ──
-  const [alerts, setAlerts] = useState(() => alertStore.getRecentAlerts(userId, 30));
+  // ── Alerts & Telemetry stores (Device-Scoped) ──
+  const [alerts, setAlerts] = useState(() => alertStore.loadDeviceAlerts(userId, selectedDeviceKey));
   const [unackCount, setUnackCount] = useState(() => alertStore.getUnacknowledgedCount(userId));
 
   // ── Interactive Map & Draft Safe-Zone State ──
@@ -261,18 +346,75 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
   const [recentTrail, setRecentTrail] = useState([]);
   const [evaluationLog, setEvaluationLog] = useState([]);
 
-  // ── Routine History & Profile state ──
+  // ── Routine History & Profile state (Device-Scoped) ──
   const [routineHistory, setRoutineHistory] = useState({});
   const [routineProfile, setRoutineProfile] = useState(null);
 
   // ── Navigation & UI State ──
   // Tabs: 'overview' | 'safezones' | 'alerts' | 'inspector'
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [showSetupWizard, setShowSetupWizard] = useState(false);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [showExpectedRoute, setShowExpectedRoute] = useState(true);
   const [flyToTarget, setFlyToTarget] = useState(null);
   const [toasts, setToasts] = useState([]);
+
+  // Synchronize activeTab whenever initialTab changes
+  useEffect(() => {
+    if (initialTab) {
+      setShowSetupWizard(false);
+      setIsMapExpanded(false);
+      setActiveTab(initialTab);
+      if (initialTab === 'inspector') {
+        setTimeout(() => {
+          const el = document.querySelector('.tech-inspector-drawer') || document.querySelector('.caretag-content-pane');
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 120);
+      }
+    }
+  }, [initialTab]);
+
+  // Resilient tab and inspector navigation that clears overlaying modals/views
+  const handleOpenInspector = useCallback(() => {
+    setShowSetupWizard(false);
+    setIsMapExpanded(false);
+    setActiveTab('inspector');
+    setTimeout(() => {
+      const el = document.querySelector('.tech-inspector-drawer') || document.querySelector('.caretag-content-pane');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  }, []);
+
+  const handleNavigateTab = useCallback((tab) => {
+    setShowSetupWizard(false);
+    setIsMapExpanded(false);
+    setActiveTab(tab);
+    if (tab === 'inspector') {
+      setTimeout(() => {
+        const el = document.querySelector('.tech-inspector-drawer') || document.querySelector('.caretag-content-pane');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  }, []);
+
+  // Listen for global navigation events from chatbot or landing page
+  useEffect(() => {
+    const handleNavEvent = (e) => {
+      if (e.detail) {
+        setShowSetupWizard(false);
+        setIsMapExpanded(false);
+        setActiveTab(e.detail);
+        if (e.detail === 'inspector') {
+          setTimeout(() => {
+            const el = document.querySelector('.tech-inspector-drawer') || document.querySelector('.caretag-content-pane');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 100);
+        }
+      }
+    };
+    window.addEventListener('caretag:navigate-tab', handleNavEvent);
+    return () => window.removeEventListener('caretag:navigate-tab', handleNavEvent);
+  }, []);
 
   const geofencesRef = useRef(geofences);
   useEffect(() => {
@@ -288,23 +430,24 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
     setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), ttl);
   }, []);
 
-  // Reload alerts from persistent store
+  // Reload alerts from persistent store (scoped to selected device)
   const refreshAlerts = useCallback(() => {
-    setAlerts(alertStore.getRecentAlerts(userId, 30));
+    setAlerts(alertStore.loadDeviceAlerts(userId, selectedDeviceKey));
     setUnackCount(alertStore.getUnacknowledgedCount(userId));
-  }, [userId]);
+  }, [userId, selectedDeviceKey]);
 
   // Load Geofences and Routine data from Firebase & local stores
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (targetDeviceKey) => {
+    const dKey = targetDeviceKey || selectedDeviceKey;
     try {
-      const list = await api.fetchGeofences(deviceKey, userId);
+      const list = await api.fetchGeofences(dKey, userId);
       setGeofences(list || []);
 
-      // Load routine history and profile from Firebase RTDB
-      const history = await fetchRoutineHistoryFromFirebase(deviceKey);
+      // Load routine history and profile from Firebase RTDB for selected device
+      const history = await fetchRoutineHistoryFromFirebase(dKey);
       setRoutineHistory(history || {});
-      const prof = await fetchRoutineProfileFromFirebase(deviceKey);
-      if (prof) setRoutineProfile(prof);
+      const prof = await fetchRoutineProfileFromFirebase(dKey);
+      setRoutineProfile(prof || null);
 
       // If user has zero safe places and has not dismissed wizard, show wizard
       const hasCompleted = localStorage.getItem(`caretag_setup_completed_${userId}`);
@@ -314,16 +457,65 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
     } catch {
       pushToast('Unable to synchronize safe places with server', 'error');
     }
-  }, [deviceKey, userId, pushToast]);
+  }, [selectedDeviceKey, userId, pushToast]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    loadData(selectedDeviceKey);
+  }, [loadData, selectedDeviceKey]);
+
+  // ── Device Switch Handler with Clean State Isolation ──
+  const handleSwitchDevice = useCallback((newKey) => {
+    if (newKey === selectedDeviceKey) {
+      setIsDeviceMenuOpen(false);
+      return;
+    }
+    // Cleanly isolate states: clear previous device data to avoid brief leakage
+    setLatest(null);
+    setRecentTrail([]);
+    setEvaluationLog([]);
+    setGeofences([]);
+    setRoutineHistory({});
+    setRoutineProfile(null);
+    setHardwareStatus({
+      connected: false,
+      isHardwareStreaming: false,
+      isStale: false,
+      statusText: `CONNECTING TO ${newKey}...`,
+      batteryPercent: 92,
+      deviceStatus: DEVICE_STATUS.CONNECTING,
+    });
+    setSelectedDeviceKey(newKey);
+    deviceStore.setActiveDeviceKey(userId, newKey);
+    setIsDeviceMenuOpen(false);
+    pushToast(`Switched active profile to ${newKey}`, 'info');
+  }, [selectedDeviceKey, userId, pushToast]);
+
+  // ── Link New Device Handler ──
+  const handleLinkDeviceSubmit = (e) => {
+    e.preventDefault();
+    setLinkError('');
+    const res = deviceStore.linkNewDevice(userId, {
+      deviceKey: newDeviceKeyInput,
+      childName: newChildNameInput,
+      age: newAgeInput,
+      relation: newRelationInput,
+    });
+    if (!res.ok) {
+      setLinkError(res.error || 'Failed to link device');
+      return;
+    }
+    setDevicesList(res.devices);
+    handleSwitchDevice(res.device.deviceKey);
+    setShowLinkDeviceModal(false);
+    setNewDeviceKeyInput('');
+    setNewChildNameInput('');
+    pushToast(`Linked ${res.device.deviceKey} (${res.device.childName}) successfully!`, 'success');
+  };
 
   // ── Real-Time Safe Places Synchronization across users & devices ──
   useEffect(() => {
     let mounted = true;
-    const unsubscribe = api.subscribeSafeZones(deviceKey, userId, (updatedList) => {
+    const unsubscribe = api.subscribeSafeZones(selectedDeviceKey, userId, (updatedList) => {
       if (mounted && Array.isArray(updatedList) && updatedList.length > 0) {
         setGeofences(updatedList);
       }
@@ -332,9 +524,9 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
       mounted = false;
       if (unsubscribe) unsubscribe();
     };
-  }, [deviceKey, userId]);
+  }, [selectedDeviceKey, userId]);
 
-  // ── Live Hardware Telemetry Subscription (Firebase RTDB) ──
+  // ── Live Hardware Telemetry Subscription (Firebase RTDB, Device-Scoped) ──
   useEffect(() => {
     let mounted = true;
 
@@ -389,7 +581,7 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
             if (!isRecent) {
               alertStore.saveAlert(userId, {
                 type: 'boundary_breach',
-                deviceId: deviceKey,
+                deviceId: selectedDeviceKey,
                 latitude: enriched.latitude,
                 longitude: enriched.longitude,
                 nearestGeofence: safetyResult.nearestZone,
@@ -401,20 +593,26 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
               pushToast(`Safety Alert: Child outside "${safetyResult.nearestZone}"`, 'warning');
             }
           } else if (safetyResult.status === 'deviation') {
-            const lastDevAlert = alertStore.getRecentAlerts(userId, 1)[0];
-            const isRecent = lastDevAlert && (Date.now() - new Date(lastDevAlert.timestamp).getTime()) < 60000;
-            if (!isRecent) {
-              alertStore.saveAlert(userId, {
-                type: 'route_deviation',
-                deviceId: deviceKey,
-                latitude: enriched.latitude,
-                longitude: enriched.longitude,
-                nearestGeofence: safetyResult.nearestZone,
-                message: 'Child deviated from established daily route corridor.',
-                source: 'hardware',
-              });
-              refreshAlerts();
-              pushToast('Notice: Route deviation flagged against learned pattern', 'info');
+            // Check if Trip Mode is active or deviation alerts are muted
+            const activeTrip = alertStore.getTripMode(userId, selectedDeviceKey);
+            const alertPrefs = alertStore.getAlertPreferences(userId, selectedDeviceKey);
+
+            if (!activeTrip.active && alertPrefs.deviationAlerts) {
+              const lastDevAlert = alertStore.getRecentAlerts(userId, 1)[0];
+              const isRecent = lastDevAlert && (Date.now() - new Date(lastDevAlert.timestamp).getTime()) < 60000;
+              if (!isRecent) {
+                alertStore.saveAlert(userId, {
+                  type: 'route_deviation',
+                  deviceId: selectedDeviceKey,
+                  latitude: enriched.latitude,
+                  longitude: enriched.longitude,
+                  nearestGeofence: safetyResult.nearestZone,
+                  message: 'Child deviated from established daily route corridor.',
+                  source: 'hardware',
+                });
+                refreshAlerts();
+                pushToast('Notice: Route deviation flagged against learned pattern', 'info');
+              }
             }
           }
 
@@ -422,21 +620,22 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
           const now = Date.now();
           if (now - lastObservedRecordTime.current >= 30000 && hwPacket.gps?.valid) {
             lastObservedRecordTime.current = now;
-            saveRoutineObservationToFirebase(deviceKey, hwPacket).catch(() => {});
+            saveRoutineObservationToFirebase(selectedDeviceKey, hwPacket).catch(() => {});
           }
         }
       },
       (hwStatus) => {
         if (!mounted) return;
         setHardwareStatus(hwStatus);
-      }
+      },
+      { deviceKey: selectedDeviceKey }
     );
 
     return () => {
       mounted = false;
       if (unsubscribe) unsubscribe();
     };
-  }, [simRunning, isLiveHardwareMode, userId, deviceKey, pushToast, refreshAlerts]);
+  }, [simRunning, isLiveHardwareMode, userId, selectedDeviceKey, pushToast, refreshAlerts]);
 
   // ── Capstone Scenario Simulation Controls (Strictly Isolated) ──
   const handleStartScenario = (scenarioId) => {
@@ -501,7 +700,7 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
   // ── Safe Zone Management Handlers ──
   const handleSaveGeofence = async (zoneData) => {
     try {
-      const created = await api.createGeofence(zoneData, deviceKey, userId);
+      const created = await api.createGeofence(zoneData, selectedDeviceKey, userId);
       setGeofences(prev => {
         const idx = prev.findIndex(g => String(g.id) === String(created.id));
         if (idx >= 0) {
@@ -523,7 +722,7 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
 
   const handleUpdateGeofence = async (id, updates) => {
     try {
-      const updated = await api.updateGeofence(id, updates, deviceKey, userId);
+      const updated = await api.updateGeofence(id, updates, selectedDeviceKey, userId);
       setGeofences(prev => prev.map(g => String(g.id) === String(id) ? { ...g, ...updated } : g));
       pushToast('Safe place updated.', 'success');
       return updated;
@@ -535,7 +734,7 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
 
   const handleDeleteGeofence = async (id) => {
     try {
-      await api.deleteGeofence(deviceKey, id, userId);
+      await api.deleteGeofence(selectedDeviceKey, id, userId);
       setGeofences(prev => prev.filter(g => String(g.id) !== String(id)));
       if (selectedZoneId === id) setSelectedZoneId(null);
       pushToast('Safe place removed.', 'info');
@@ -581,15 +780,15 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
   const mapCenterLat = latest?.lat || (geofences[0] ? geofences[0].centerLatitude : 30.3491155);
   const mapCenterLng = latest?.lng || (geofences[0] ? geofences[0].centerLongitude : 76.4117108);
 
-  // Expected route corridor coordinates
-  const routeWaypoints = geofences.length >= 2
-    ? geofences.slice(0, 4).map(g => [g.centerLatitude, g.centerLongitude])
-    : [
-        [30.34911, 76.41171],
-        [30.35120, 76.41580],
-        [30.35380, 76.41950],
-        [30.35550, 76.42250]
-      ];
+  // Expected route corridor coordinates:
+  // Strictly only displayed when valid learned corridor exists with sufficient history,
+  // or when an active demonstration scenario defines a simulation corridor.
+  // NEVER connect safe-place circles together!
+  const routeWaypoints = simRunning && activeScenario && SCENARIO_PRESETS[activeScenario]?.routePoints
+    ? SCENARIO_PRESETS[activeScenario].routePoints
+    : (routineProfile?.hasSufficientHistory && Array.isArray(routineProfile?.learnedCorridor) && routineProfile.learnedCorridor.length >= 2)
+    ? routineProfile.learnedCorridor
+    : [];
 
   // Active top alert (only non-nominal)
   const topAlert = alerts.find(a => !a.acknowledged && a.type !== 'nominal_safety');
@@ -608,17 +807,70 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
             <CareTagLogo variant="horizontal" size="sm" showTagline={false} />
           </button>
 
-          {/* Child Active Profile Pill */}
-          <div className="child-profile-pill" title={`Monitored Profile: ${monitoredName}`}>
-            <div className="child-avatar">
-              <span>{monitoredInitial}</span>
-            </div>
-            <div className="child-meta">
-              <span className="child-name">{monitoredName}</span>
-              <span className="child-device-tag">
-                {isLiveHardwareMode ? 'Smart Band ESP32' : `Sim: ${activeScenario || 'Active'}`}
-              </span>
-            </div>
+          {/* Child Active Profile & Multi-Device Selector */}
+          <div className="child-profile-selector-wrap" style={{ position: 'relative' }}>
+            <button
+              type="button"
+              className="child-profile-pill child-profile-pill--selectable"
+              onClick={() => setIsDeviceMenuOpen(o => !o)}
+              title="Click to switch monitored child or device"
+              aria-haspopup="true"
+              aria-expanded={isDeviceMenuOpen}
+            >
+              <div className="child-avatar" style={{ backgroundColor: activeProfile.avatarColor || '#2563EB' }}>
+                <span>{monitoredInitial}</span>
+              </div>
+              <div className="child-meta">
+                <span className="child-name">{monitoredName}</span>
+                <span className="child-device-tag">
+                  {isLiveHardwareMode ? activeProfile.deviceKey : `Sim: ${activeScenario || 'Active'}`}
+                </span>
+              </div>
+              <ChevronDown size={14} className="device-dropdown-chevron" />
+            </button>
+
+            {isDeviceMenuOpen && (
+              <div className="device-select-dropdown" role="menu">
+                <div className="dropdown-header-label">Switch Monitored Wearable</div>
+                <div className="device-select-list">
+                  {devicesList.map(dev => {
+                    const isSelected = dev.deviceKey === selectedDeviceKey;
+                    const initial = (dev.childName?.trim().charAt(0) || 'C').toUpperCase();
+                    return (
+                      <button
+                        key={dev.id || dev.deviceKey}
+                        type="button"
+                        className={`device-select-item ${isSelected ? 'is-selected' : ''}`}
+                        onClick={() => handleSwitchDevice(dev.deviceKey)}
+                        role="menuitem"
+                      >
+                        <div className="child-avatar child-avatar--sm" style={{ backgroundColor: dev.avatarColor || '#2563EB' }}>
+                          <span>{initial}</span>
+                        </div>
+                        <div className="device-select-info">
+                          <strong className="dev-name">{dev.childName}</strong>
+                          <span className="dev-key">{dev.deviceKey} &bull; {dev.relation || 'Child'}</span>
+                        </div>
+                        {isSelected && <Check size={14} className="text-teal" />}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="device-dropdown-footer">
+                  <button
+                    type="button"
+                    className="btn-link-new-device"
+                    onClick={() => {
+                      setIsDeviceMenuOpen(false);
+                      setShowLinkDeviceModal(true);
+                    }}
+                  >
+                    <Plus size={13} />
+                    <span>Link Another Smart Band</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -725,6 +977,28 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
           </button>
         </div>
       </header>
+
+      {/* ── Active Trip Mode Callout Banner ── */}
+      {tripMode.active && (
+        <aside className="trip-mode-active-banner" role="status" aria-live="polite">
+          <div className="trip-mode-banner-content">
+            <div className="trip-mode-icon-wrap">
+              <Car size={16} />
+            </div>
+            <div className="trip-mode-text">
+              <strong>Trip Mode Active ({selectedDeviceKey})</strong> &bull; <span>Route-deviation alerts paused while travelling together. Auto-restores in <strong>{tripMode.formattedRemaining}</strong>.</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn-end-trip-mode"
+            onClick={handleEndTripMode}
+            title="Resume standard route-deviation alerts immediately"
+          >
+            End Trip Mode
+          </button>
+        </aside>
+      )}
 
       {/* ── Active Incident Callout Banner (Top Alert) ── */}
       {topAlert && activeTab !== 'alerts' && (
@@ -1187,17 +1461,113 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
               isLiveHardwareMode={isLiveHardwareMode}
               routineProfile={routineProfile}
               routineHistory={routineHistory}
+              selectedDeviceKey={selectedDeviceKey}
+              activeProfile={activeProfile}
+              devicesList={devicesList}
+              onSwitchDevice={handleSwitchDevice}
+              onOpenLinkDevice={() => setShowLinkDeviceModal(true)}
+              tripMode={tripMode}
+              onSetTripMode={handleSetTripMode}
+              onEndTripMode={handleEndTripMode}
               onRecenterMap={() => {
                 if (latest) setFlyToTarget({ latlng: [latest.lat, latest.lng], timestamp: Date.now() });
               }}
               onAcknowledgeAlert={handleAcknowledgeAlert}
-              onOpenSafeZones={() => setActiveTab('safezones')}
-              onOpenTechInspector={() => setActiveTab('inspector')}
+              onOpenSafeZones={() => handleNavigateTab('safezones')}
+              onOpenTechInspector={handleOpenInspector}
             />
           )}
 
         </section>
       </main>
+
+      {/* ── Link New Smart Band Modal ── */}
+      {showLinkDeviceModal && (
+        <div className="caretag-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="link-device-title">
+          <div className="caretag-modal-card">
+            <div className="modal-header">
+              <div className="modal-title-wrap">
+                <Smartphone size={18} className="text-teal" />
+                <h3 id="link-device-title">Link New Smart Band</h3>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => { setShowLinkDeviceModal(false); setLinkError(''); }}
+                aria-label="Close Modal"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <form onSubmit={handleLinkDeviceSubmit} className="modal-body-form">
+              <p className="modal-desc">
+                Register a new wearable device to this caregiver account. Each device maintains isolated real-time telemetry, location, and routine models.
+              </p>
+              {linkError && (
+                <div className="form-error-banner" role="alert">
+                  <AlertTriangle size={14} />
+                  <span>{linkError}</span>
+                </div>
+              )}
+              <div className="form-group">
+                <label>Device Key / Hardware Identifier *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. CARE-TAG-04 or ESP32-BAND-02"
+                  value={newDeviceKeyInput}
+                  onChange={e => setNewDeviceKeyInput(e.target.value.toUpperCase())}
+                  required
+                />
+                <span className="form-hint">Found on the bottom of the band or in the pairing document.</span>
+              </div>
+              <div className="form-group">
+                <label>Child / Profile Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Diya Singla"
+                  value={newChildNameInput}
+                  onChange={e => setNewChildNameInput(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="form-row-2">
+                <div className="form-group">
+                  <label>Age</label>
+                  <input
+                    type="number"
+                    min="2"
+                    max="18"
+                    value={newAgeInput}
+                    onChange={e => setNewAgeInput(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Relationship</label>
+                  <select value={newRelationInput} onChange={e => setNewRelationInput(e.target.value)}>
+                    <option value="Child">Child</option>
+                    <option value="Ward">Ward</option>
+                    <option value="Student">Student</option>
+                    <option value="Elderly Parent">Elderly Parent</option>
+                  </select>
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => { setShowLinkDeviceModal(false); setLinkError(''); }}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  <Plus size={14} />
+                  <span>Link &amp; Activate Device</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* ── Toast Notifications System ── */}
       <div className="caretag-toast-container" aria-live="polite">
@@ -1220,8 +1590,8 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
         alerts={alerts}
         latest={latest?.packet}
         simRunning={simRunning}
-        onNavigateTab={(tab) => setActiveTab(tab)}
-        onOpenInspector={() => setActiveTab('inspector')}
+        onNavigateTab={handleNavigateTab}
+        onOpenInspector={handleOpenInspector}
         onRecenterMap={() => {
           if (latest) {
             setFlyToTarget({ latlng: [latest.lat, latest.lng], timestamp: Date.now() });

@@ -399,9 +399,9 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
 
           <div className="team-mentor-wrap">
             <div className="team-mentor-pill">
-              <span className="team-mentor-badge">Faculty Mentor</span>
+              <span className="team-mentor-badge">Faculty Mentors</span>
               <span className="team-mentor-text">
-                <strong>Dr. Kapil Tomar</strong>, Associate Professor, CSED
+                <strong>Dr. Kapil Tomar</strong> &amp; <strong>Dr. Ravindra Kumar</strong>, Associate Professors, CSED
               </span>
             </div>
           </div>
