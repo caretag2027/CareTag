@@ -618,7 +618,7 @@ export default function SafeZoneManager({
                 <div className="safezone-card-top">
                   <div className="safezone-card-title-group">
                     <div className={`zone-category-badge zone-category--${zone.category || 'home'}`}>
-                      <CatIcon size={15} />
+                      <CatIcon size={16} />
                     </div>
                     <div>
                       <h4 className="zone-name">{zone.label || zone.name}</h4>
@@ -631,33 +631,35 @@ export default function SafeZoneManager({
                           </span>
                         ) : (
                           <span className="schedule-status-pill is-active">
-                            <span>All Day</span>
+                            <span>All Day 24/7</span>
                           </span>
                         )}
                         {!isEnabled && (
-                          <span className="disabled-pill">Disabled</span>
+                          <span className="disabled-pill">Monitoring Paused</span>
                         )}
                       </div>
                     </div>
                   </div>
 
-                  <div className="zone-card-actions">
+                  <div className="zone-card-actions" onClick={e => e.stopPropagation()}>
                     <button
                       type="button"
-                      className="btn-icon-sm"
+                      className={`btn-icon-sm ${isEnabled ? 'btn-icon-sm--active' : ''}`}
                       onClick={(e) => handleToggleEnabled(zone, e)}
-                      title={isEnabled ? 'Disable Monitoring' : 'Enable Monitoring'}
+                      title={isEnabled ? 'Pause Monitoring' : 'Enable Monitoring'}
+                      aria-label={isEnabled ? 'Pause Monitoring' : 'Enable Monitoring'}
                     >
                       <Power size={13} color={isEnabled ? '#059669' : '#94A3B8'} />
                     </button>
                     <button
                       type="button"
-                      className="btn-icon-sm"
+                      className="btn-icon-sm btn-icon-sm--edit"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleStartEdit(zone);
                       }}
                       title="Edit Safe Place"
+                      aria-label="Edit Safe Place"
                     >
                       <Edit2 size={13} color="#2563EB" />
                     </button>
@@ -669,26 +671,53 @@ export default function SafeZoneManager({
                         setConfirmDeleteId(zone.id);
                       }}
                       title="Delete Safe Place"
+                      aria-label="Delete Safe Place"
                     >
                       <Trash2 size={13} />
                     </button>
                   </div>
                 </div>
 
-                {/* Proximity / Inside status */}
-                <div className="safezone-proximity-row">
-                  <span className={`zone-child-status ${isInside ? 'is-inside' : 'is-outside'}`}>
-                    {isInside ? (
-                      <>
-                        <span className="status-live-dot" />
-                        <strong>Child is currently inside this zone</strong>
-                      </>
-                    ) : distanceKm != null ? (
-                      <span>{distanceKm < 1 ? `${Math.round(distanceKm * 1000)}m away` : `${distanceKm.toFixed(1)} km away`}</span>
-                    ) : (
-                      <span>Awaiting device location</span>
-                    )}
-                  </span>
+                {/* Coordinates & Proximity details */}
+                <div className="safezone-card-details">
+                  <div className="safezone-proximity-row">
+                    <span className={`zone-child-status ${isInside ? 'is-inside' : 'is-outside'}`}>
+                      {isInside ? (
+                        <>
+                          <span className="status-live-dot" />
+                          <strong>Child is currently inside this safe zone</strong>
+                        </>
+                      ) : distanceKm != null ? (
+                        <>
+                          <MapPin size={12} />
+                          <span>{distanceKm < 1 ? `${Math.round(distanceKm * 1000)}m from child` : `${distanceKm.toFixed(1)} km from child`}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Clock size={12} />
+                          <span>Awaiting live device GPS location</span>
+                        </>
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="safezone-coords-row">
+                    <span className="safezone-coords-chip">
+                      {zone.centerLatitude?.toFixed(5)}° N, {zone.centerLongitude?.toFixed(5)}° E
+                    </span>
+                    <button
+                      type="button"
+                      className="safezone-focus-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectZone?.(zone.id);
+                        onFlyToZone?.(zone.centerLatitude, zone.centerLongitude);
+                      }}
+                    >
+                      <MapPin size={11} />
+                      <span>View on Map</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Delete Confirmation Modal Overlay */}

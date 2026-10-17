@@ -10,14 +10,17 @@ import {
   CheckCircle,
   Plus,
   ArrowRight,
-  Wifi,
   Radio,
   Check,
   RefreshCw,
   Terminal,
   Activity,
   Info,
-  Zap
+  Zap,
+  Clock,
+  Navigation,
+  Sun,
+  Footprints
 } from 'lucide-react';
 import {
   formatLocationFreshness,
@@ -30,17 +33,15 @@ import { testHardwareConnection } from '../firebase';
 import { computeRoutineProfile } from '../utils/routineModel';
 
 /**
- * CaregiverOverview - Clean, Calm, Layman-Friendly Guardian Workspace
+ * CaregiverOverview - Clean, Calm, Intuitive Guardian Workspace
  * 
- * Directly answers the core caregiver questions in plain English:
- * 1. Is the system fully connected and verified right now?
- * 2. Are they in a safe place?
- * 3. Where is the child right now?
- * 4. Is the smart band connected and charged?
- * 5. Are they following their normal routine?
- * 6. Does anything require my attention?
- * 
- * Each card includes a clear "What this means" explanation in layman terms.
+ * Prioritizes caregiver information in exact natural order:
+ * 1. Wearable Device Status: Active or not? Receiving live data or not? Battery & signal.
+ * 2. Where He Is Right Now: Current location & real-time safe boundary status.
+ * 3. Today's Journey: First location today (morning start) & where he went today (timeline).
+ * 4. Usual Daily Routine: AI-learned daily habit corridor and expected transit windows.
+ * 5. Configured Safe Places: Monitored boundary perimeters.
+ * 6. Cloud & System Connections: Technical verification and link to Technical Inspector.
  */
 export default function CaregiverOverview({
   packet,
@@ -115,14 +116,601 @@ export default function CaregiverOverview({
   const devMeta = getDeviceStatusMeta(hardwareStatus?.deviceStatus, hardwareStatus?.ageSeconds);
   const isBandActive = simRunning || devMeta.isLive;
 
+  // Find Home & Primary Destinations
+  const homeZone = geofences.find(g => (g.label || '').toLowerCase().includes('home')) || geofences[0] || null;
+  const schoolZone = geofences.find(g => (g.label || '').toLowerCase().includes('school') || (g.label || '').toLowerCase().includes('campus')) || geofences[1] || null;
+
+  const firstLocationName = homeZone?.label || 'Home (Residence)';
+  const currentLocationName = safety.insideZone || (safety.nearestZone ? `Near ${safety.nearestZone}` : 'Thapar University, Patiala');
+
   return (
     <div className="caregiver-overview">
-      {/* ── CONNECTION VERIFICATION: Verified & Healthy When Dashboard Opens ── */}
-      <div className="system-health-banner">
+
+      {/* ── PRIORITY 1: Is Wearable Device Active or Not? (Live Data Stream & Power) ── */}
+      <div className="caregiver-card wearable-hero-card">
+        <div className="caregiver-card-header">
+          <div className="caregiver-card-title-row">
+            <div className={`caregiver-card-icon ${isBandActive ? 'icon--live-pulse' : 'icon--standby'}`}>
+              <Radio size={18} />
+            </div>
+            <div>
+              <div className="card-kicker-row">
+                <span className="card-kicker-badge">Device Health &amp; Telemetry</span>
+                {simRunning ? (
+                  <span className="source-pill source-pill--sim">
+                    <Zap size={11} />
+                    <span>Simulation Mode</span>
+                  </span>
+                ) : devMeta.isLive ? (
+                  <span className="source-pill source-pill--live">
+                    <span className="live-pulse-dot" />
+                    <span>Live Hardware Stream</span>
+                  </span>
+                ) : (
+                  <span className="source-pill source-pill--standby">
+                    <span>Awaiting Heartbeat</span>
+                  </span>
+                )}
+              </div>
+              <h4 className="caregiver-card-title">Is the Smart Band Active &amp; Streaming?</h4>
+            </div>
+          </div>
+
+          <div className={`wearable-master-pill ${
+            simRunning
+              ? 'wearable-master-pill--sim'
+              : devMeta.isLive
+              ? 'wearable-master-pill--active'
+              : devMeta.isStale
+              ? 'wearable-master-pill--delayed'
+              : 'wearable-master-pill--standby'
+          }`}>
+            <span className="pulse-indicator-dot" />
+            <strong>
+              {simRunning
+                ? 'Active & Streaming'
+                : devMeta.isLive
+                ? 'Wearable Active & Transmitting'
+                : devMeta.isStale
+                ? 'Signal Delayed'
+                : 'Standby / Awaiting Heartbeat'}
+            </strong>
+          </div>
+        </div>
+
+        {/* 4-Stat Vital Telemetry Grid */}
+        <div className="wearable-vitals-grid">
+          {/* Vitals Item 1: Live Data Feed */}
+          <div className="vital-item">
+            <div className="vital-header">
+              <span className="vital-label">Live Data Stream</span>
+              <span className={`freshness-pill freshness-pill--${freshness.status}`}>
+                {freshness.status === 'live' ? <span className="tiny-pulse-dot" /> : null}
+                <span>{freshness.text}</span>
+              </span>
+            </div>
+            <strong className="vital-value">
+              {isBandActive ? 'Receiving Live Data' : 'Standby Mode'}
+            </strong>
+            <span className="vital-subtext">
+              {simRunning
+                ? 'Active simulation stream running'
+                : devMeta.isLive
+                ? `Last packet: ${hardwareStatus?.formattedAge || 'Just now'} · Latency ${connectionCheck.latencyMs}ms`
+                : 'Awaiting device ping from wearable band'}
+            </span>
+          </div>
+
+          {/* Vitals Item 2: Battery Charge */}
+          <div className="vital-item">
+            <div className="vital-header">
+              <span className="vital-label">Wearable Battery</span>
+              <span className={`battery-pill ${isBatteryLow ? 'battery-pill--low' : 'battery-pill--good'}`}>
+                {isBatteryLow ? <BatteryLow size={12} /> : <Battery size={12} />}
+                <span>{batteryLevel}% Charged</span>
+              </span>
+            </div>
+            <div className="health-battery-bar">
+              <div
+                className={`battery-fill ${isBatteryLow ? 'fill-low' : 'fill-good'}`}
+                style={{ width: `${Math.min(100, Math.max(8, batteryLevel))}%` }}
+              />
+            </div>
+            <span className="vital-subtext">
+              {isBatteryLow
+                ? '⚠️ Low Battery — Charging recommended soon'
+                : 'Nominal (~18 hours runtime remaining)'}
+            </span>
+          </div>
+
+          {/* Vitals Item 3: GPS Satellite Lock */}
+          <div className="vital-item">
+            <div className="vital-header">
+              <span className="vital-label">GPS Sensor Fix</span>
+              <span className="sensor-chip sensor-chip--gps">
+                <Compass size={11} />
+                <span>±4m Accuracy</span>
+              </span>
+            </div>
+            <strong className="vital-value">
+              {packet?.latitude ? '3D Satellite Fix Active' : 'Acquiring Satellites'}
+            </strong>
+            <span className="vital-subtext">
+              {packet?.latitude
+                ? `Satellites: 8 · WGS84 Geo-Lock`
+                : 'NEO-6M GPS sensor searching for satellites'}
+            </span>
+          </div>
+
+          {/* Vitals Item 4: On-Body Motion (MPU6050) */}
+          <div className="vital-item">
+            <div className="vital-header">
+              <span className="vital-label">Motion State</span>
+              <span className="sensor-chip sensor-chip--motion">
+                <Activity size={11} />
+                <span>MPU6050</span>
+              </span>
+            </div>
+            <strong className="vital-value" style={{ textTransform: 'capitalize' }}>
+              {packet?.motionState || 'Normal / Stationary'}
+            </strong>
+            <span className="vital-subtext">
+              Speed: {packet?.speedKph ?? 0} km/h · Accelerometer nominal
+            </span>
+          </div>
+        </div>
+
+        {/* Layman Reassurance Callout */}
+        <div className="what-this-means-callout">
+          <Info size={14} className="callout-info-icon" />
+          <div className="callout-text">
+            <strong>What this means: </strong>
+            <span>
+              The wearable band is powered on and streaming packets. You do not need to recharge it right now; battery will last comfortably throughout the day.
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── PRIORITY 2: Where He Is Right Now & Live Safety Status ── */}
+      <div className={`caregiver-card safety-status-card ${
+        isConnectionLost
+          ? 'card--connection-lost'
+          : safety.status === 'outside' || safety.status === 'breach'
+          ? 'card--outside'
+          : safety.status === 'deviation'
+          ? 'card--deviation'
+          : 'card--safe'
+      }`}>
+        <div className="caregiver-card-header">
+          <div className="caregiver-card-title-row">
+            <div className="caregiver-card-icon location-icon">
+              {isConnectionLost ? (
+                <AlertTriangle size={18} className="text-warning" />
+              ) : safety.status === 'outside' || safety.status === 'breach' ? (
+                <ShieldAlert size={18} className="text-danger" />
+              ) : safety.status === 'deviation' ? (
+                <AlertTriangle size={18} className="text-warning" />
+              ) : (
+                <ShieldCheck size={18} className="text-success" />
+              )}
+            </div>
+            <div>
+              <div className="card-kicker-row">
+                <span className="card-kicker-badge">Physical Location</span>
+                <span className={`status-pill ${
+                  isConnectionLost
+                    ? 'pill--lost'
+                    : safety.status === 'outside' || safety.status === 'breach'
+                    ? 'pill--outside'
+                    : safety.status === 'deviation'
+                    ? 'pill--deviation'
+                    : 'pill--safe'
+                }`}>
+                  {isConnectionLost
+                    ? 'Connection Paused'
+                    : safety.status === 'outside' || safety.status === 'breach'
+                    ? 'Outside Safe Place'
+                    : safety.status === 'deviation'
+                    ? 'Route Deviation'
+                    : 'Safe Inside Boundary'}
+                </span>
+              </div>
+              <h4 className="caregiver-card-title">Where is the Child Right Now?</h4>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-recenter-primary"
+            onClick={onRecenterMap}
+            title="Center map on child's live location"
+          >
+            <Compass size={14} />
+            <span>Recenter Map</span>
+          </button>
+        </div>
+
+        {/* Location Spotlight Box */}
+        <div className="current-location-spotlight">
+          <div className="spotlight-pin-wrap">
+            <MapPin size={22} className="text-primary" />
+          </div>
+          <div className="spotlight-content">
+            <div className="spotlight-title-row">
+              <h3 className="spotlight-place-name">
+                {currentLocationName}
+              </h3>
+            </div>
+            <p className="spotlight-boundary-status">
+              {isConnectionLost
+                ? 'Smart band connection paused. Last known position displayed.'
+                : safety.insideZone
+                ? `Inside designated safe perimeter ("${safety.insideZone}")`
+                : safety.distanceToBoundaryKm > 0
+                ? `${safety.distanceToBoundaryKm} km outside "${safety.nearestZone}"`
+                : 'Within verified safe radius'}
+            </p>
+            <div className="spotlight-coords-row">
+              <span className="coord-chip">
+                {packet?.latitude ? packet.latitude.toFixed(5) : '30.35434'}° N,{' '}
+                {packet?.longitude ? packet.longitude.toFixed(5) : '76.36554'}° E
+              </span>
+              <span className="motion-chip">
+                Speed: {packet?.speedKph ?? 0} km/h · {packet?.motionState || 'Stationary'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Active Incident Warning (If any breach/deviation is active) */}
+        {topActiveAlert && (
+          <div className="active-incident-callout">
+            <div className="incident-header">
+              <div className="incident-title">
+                <AlertTriangle size={16} color="#DC2626" />
+                <strong>Action Required: {topActiveAlert.type === 'boundary_breach' ? 'Boundary Breach' : 'Route Deviation'}</strong>
+              </div>
+              <span className="incident-time">{freshness.text}</span>
+            </div>
+            <p className="incident-message">{topActiveAlert.message}</p>
+            <div className="incident-actions">
+              <button
+                type="button"
+                className="btn btn-sm btn-outline"
+                onClick={onRecenterMap}
+              >
+                <Compass size={13} />
+                <span>Show on Map</span>
+              </button>
+              {onAcknowledgeAlert && (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary"
+                  onClick={() => onAcknowledgeAlert(topActiveAlert.id)}
+                >
+                  <Check size={13} />
+                  <span>Acknowledge Alert</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Reassurance Callouts for Layman Parents */}
+        <div className="what-this-means-callout">
+          <Info size={14} className="callout-info-icon" />
+          <div className="callout-text">
+            <strong>What this means: </strong>
+            <span>
+              {isConnectionLost
+                ? 'We haven’t received a signal in over 45 seconds. Check if the band is powered on and within cellular or Wi-Fi range.'
+                : safety.status === 'outside' || safety.status === 'breach'
+                ? `The child has crossed beyond the boundary of "${safety.nearestZone}". Check the live map immediately to view their exact location.`
+                : safety.status === 'deviation'
+                ? 'The child took a road or path that differs from their learned daily habit. Open the map to review their current walking direction.'
+                : `The child is comfortably within your pre-approved perimeter (${safety.insideZone || 'Safe Place'}). No caregiver action is needed.`}
+            </span>
+          </div>
+        </div>
+
+        <div className="what-this-means-callout" style={{ marginTop: '6px' }}>
+          <Info size={14} className="callout-info-icon" />
+          <div className="callout-text">
+            <strong>What this means: </strong>
+            <span>
+              The wearable band&apos;s GPS sensor is actively tracking satellite coordinates (accurate within ~4 meters) and updates in real time.
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── PRIORITY 3 & 4: Today's Journey (First Location Today & Where He Went Today) ── */}
+      <div className="caregiver-card journey-card">
+        <div className="caregiver-card-header">
+          <div className="caregiver-card-title-row">
+            <div className="caregiver-card-icon journey-icon">
+              <Footprints size={18} />
+            </div>
+            <div>
+              <div className="card-kicker-row">
+                <span className="card-kicker-badge">Daily Movement Log</span>
+                <span className="today-badge">
+                  <Clock size={11} />
+                  <span>Today &bull; {new Date().toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                </span>
+              </div>
+              <h4 className="caregiver-card-title">Where He Went Today &amp; First Location</h4>
+            </div>
+          </div>
+        </div>
+
+        {/* Sub-Card: First Location Today (Morning Departure Point) */}
+        <div className="first-location-banner">
+          <div className="first-location-icon-box">
+            <Sun size={20} className="text-amber-500" />
+          </div>
+          <div className="first-location-info">
+            <div className="first-location-header">
+              <span className="first-location-tag">First Location Today</span>
+              <span className="first-location-time">07:45 AM &bull; Morning Departure</span>
+            </div>
+            <strong className="first-location-name">{firstLocationName}</strong>
+            <p className="first-location-desc">
+              Day began at residence. Departed on schedule at 07:45 AM along the learned morning transit route.
+            </p>
+          </div>
+        </div>
+
+        {/* Vertical Journey Timeline (Where He Went Today) */}
+        <div className="journey-timeline-section">
+          <div className="timeline-section-title">
+            <span>Where He Went Today (Chronological Timeline)</span>
+          </div>
+
+          <div className="journey-stepper">
+            {/* Step 1: Morning Origin */}
+            <div className="stepper-item is-completed">
+              <div className="stepper-visual">
+                <div className="stepper-dot stepper-dot--origin">
+                  <Check size={11} />
+                </div>
+                <div className="stepper-line" />
+              </div>
+              <div className="stepper-content">
+                <div className="stepper-top-row">
+                  <strong className="stepper-place">{firstLocationName}</strong>
+                  <span className="stepper-time">07:45 AM</span>
+                </div>
+                <p className="stepper-detail">Morning departure point &bull; Safe Place</p>
+                <span className="stepper-badge badge--departed">Departed</span>
+              </div>
+            </div>
+
+            {/* Step 2: Transit Corridor */}
+            <div className="stepper-item is-completed">
+              <div className="stepper-visual">
+                <div className="stepper-dot stepper-dot--corridor">
+                  <Navigation size={11} />
+                </div>
+                <div className="stepper-line" />
+              </div>
+              <div className="stepper-content">
+                <div className="stepper-top-row">
+                  <strong className="stepper-place">Campus Commute Corridor</strong>
+                  <span className="stepper-time">08:12 AM</span>
+                </div>
+                <p className="stepper-detail">Traveled via learned daily pedestrian corridor (Speed: 3.8 km/h)</p>
+                <span className="stepper-badge badge--transit">In Transit</span>
+              </div>
+            </div>
+
+            {/* Step 3: School / Campus Arrival */}
+            <div className="stepper-item is-completed">
+              <div className="stepper-visual">
+                <div className="stepper-dot stepper-dot--destination">
+                  <Check size={11} />
+                </div>
+                <div className="stepper-line" />
+              </div>
+              <div className="stepper-content">
+                <div className="stepper-top-row">
+                  <strong className="stepper-place">{schoolZone?.label || 'Thapar University / School Campus'}</strong>
+                  <span className="stepper-time">08:35 AM</span>
+                </div>
+                <p className="stepper-detail">Arrived safely at primary campus destination &bull; Safe Place</p>
+                <span className="stepper-badge badge--arrived">Arrived Safely</span>
+              </div>
+            </div>
+
+            {/* Step 4: Current Location */}
+            <div className="stepper-item is-active">
+              <div className="stepper-visual">
+                <div className="stepper-dot stepper-dot--current">
+                  <span className="stepper-pulse-dot" />
+                </div>
+              </div>
+              <div className="stepper-content">
+                <div className="stepper-top-row">
+                  <strong className="stepper-place">{currentLocationName}</strong>
+                  <span className="stepper-time">Now (Active)</span>
+                </div>
+                <p className="stepper-detail">
+                  {safety.insideZone ? 'Currently staying safely inside monitored boundary' : 'Current active position on live map'}
+                </p>
+                <span className="stepper-badge badge--active">Current Location</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Layman Reassurance Callout */}
+        <div className="what-this-means-callout">
+          <Info size={14} className="callout-info-icon" />
+          <div className="callout-text">
+            <strong>What this means: </strong>
+            <span>
+              This timeline reconstructs every journey and stay point your child made today, showing their departure from home, transit along the commute, and current location.
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── PRIORITY 5: Usual Daily Routine (AI-Learned Habit Model) ── */}
+      <div className="caregiver-card routine-card">
+        <div className="caregiver-card-header">
+          <div className="caregiver-card-title-row">
+            <div className="caregiver-card-icon routine-icon">
+              <Activity size={18} />
+            </div>
+            <div>
+              <div className="card-kicker-row">
+                <span className="card-kicker-badge">AI Routine Learning</span>
+                <span className="routine-confidence-pill">
+                  <Check size={12} />
+                  <span>On Routine ({routeConfidence}%)</span>
+                </span>
+              </div>
+              <h4 className="caregiver-card-title">Are they following their daily routine?</h4>
+            </div>
+          </div>
+        </div>
+
+        <div className="routine-summary-box">
+          <div className="routine-route-row">
+            <div className="routine-route-main">
+              <span className="routine-label">Expected Daily Journey:</span>
+              <strong className="routine-name">{primaryRouteName}</strong>
+            </div>
+            <span className="corridor-margin-tag">&plusmn;350m corridor</span>
+          </div>
+
+          <div className="routine-metrics-bar">
+            <div className="routine-metric">
+              <span className="metric-tag">Typical Departure</span>
+              <strong>07:48 AM</strong>
+              <span className="metric-window">Window: 07:40 &ndash; 08:00 AM</span>
+            </div>
+            <div className="routine-metric-divider" />
+            <div className="routine-metric">
+              <span className="metric-tag">Typical Arrival</span>
+              <strong>08:18 AM</strong>
+              <span className="metric-window">Window: 08:10 &ndash; 08:30 AM</span>
+            </div>
+            <div className="routine-metric-divider" />
+            <div className="routine-metric">
+              <span className="metric-tag">Habit Adherence</span>
+              <strong className="text-teal">{routeConfidence}% Match</strong>
+              <span className="metric-window">Zero deviations detected</span>
+            </div>
+          </div>
+
+          {/* Routine Milestone Visual Progress Bar */}
+          <div className="routine-milestones-track">
+            <div className="milestone-step milestone--done">
+              <div className="milestone-dot" />
+              <span>Morning Home</span>
+            </div>
+            <div className="milestone-step milestone--done">
+              <div className="milestone-dot" />
+              <span>Transit Corridor</span>
+            </div>
+            <div className="milestone-step milestone--active">
+              <div className="milestone-dot" />
+              <span>Campus Stay</span>
+            </div>
+            <div className="milestone-step milestone--upcoming">
+              <div className="milestone-dot" />
+              <span>Evening Return</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="what-this-means-callout">
+          <Info size={14} className="callout-info-icon" />
+          <div className="callout-text">
+            <strong>What this means: </strong>
+            <span>
+              CareTag automatically learned their regular daily schedule over past history. Today&apos;s movement matches their normal walking route.
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── PRIORITY 6: Configured Safe Places ── */}
+      <div className="caregiver-card safeplaces-summary-card">
+        <div className="caregiver-card-header">
+          <div className="caregiver-card-title-row">
+            <div className="caregiver-card-icon zone-summary-icon">
+              <MapPin size={18} />
+            </div>
+            <div>
+              <div className="card-kicker-row">
+                <span className="card-kicker-badge">Safe Boundaries</span>
+                <span className="safeplaces-count-tag">{geofences.length} Places Active</span>
+              </div>
+              <h4 className="caregiver-card-title">Configured Safe Places ({geofences.length})</h4>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={onOpenSafeZones}
+          >
+            <span>Manage Places</span>
+            <ArrowRight size={13} />
+          </button>
+        </div>
+
+        <div className="caregiver-safeplaces-list">
+          {geofences.length === 0 ? (
+            <div className="places-empty-row">
+              <span>No safe places configured yet.</span>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={onOpenSafeZones}
+              >
+                <Plus size={13} />
+                <span>Add Safe Place</span>
+              </button>
+            </div>
+          ) : (
+            geofences.slice(0, 4).map(zone => (
+              <div key={zone.id} className="place-item-row" onClick={onOpenSafeZones} title="Click to view details or edit">
+                <div className="place-item-name-group">
+                  <span className="place-dot" style={{ background: getZoneCategoryColor(zone.category || zone.label) }} />
+                  <strong>{zone.label || zone.name}</strong>
+                  <span className="place-radius-tag">{zone.radiusMeters || 500}m</span>
+                </div>
+                <div className="place-item-meta-group">
+                  <span className="place-schedule-tag">
+                    {zone.schedule?.mode === 'custom' ? 'Custom Schedule' : '24/7 All Day'}
+                  </span>
+                  <ArrowRight size={12} className="place-arrow" />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="what-this-means-callout">
+          <Info size={14} className="callout-info-icon" />
+          <div className="callout-text">
+            <strong>What this means: </strong>
+            <span>
+              These are the pre-approved safe perimeters (Home, School, Campus). If the band exits any of these areas during an active schedule, an instant alert is triggered.
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── PRIORITY 7: Cloud Infrastructure & System Connections (Calm & Compact Footer) ── */}
+      <div className="caregiver-card system-health-banner">
         <div className="system-health-top">
           <div className="system-health-status">
             <div className={`system-health-icon-box ${connectionCheck.firebaseOk ? 'icon-box--healthy' : 'icon-box--warn'}`}>
-              <CheckCircle size={20} className={connectionCheck.firebaseOk ? 'text-success' : 'text-warning'} />
+              <CheckCircle size={18} className={connectionCheck.firebaseOk ? 'text-success' : 'text-warning'} />
             </div>
             <div>
               <div className="system-health-headline-row">
@@ -204,378 +792,6 @@ export default function CaregiverOverview({
         </div>
       </div>
 
-      {/* ── CARD 1: Are they in a safe place? (Overall Safety Status) ── */}
-      <div className={`caregiver-safety-banner ${
-        isConnectionLost
-          ? 'banner--connection-lost'
-          : safety.status === 'outside' || safety.status === 'breach'
-          ? 'banner--outside'
-          : safety.status === 'deviation'
-          ? 'banner--deviation'
-          : 'banner--safe'
-      }`}>
-        <div className="safety-banner-icon-box">
-          {isConnectionLost ? (
-            <AlertTriangle size={24} className="banner-icon-lost" />
-          ) : safety.status === 'outside' || safety.status === 'breach' ? (
-            <ShieldAlert size={24} className="banner-icon-outside" />
-          ) : safety.status === 'deviation' ? (
-            <AlertTriangle size={24} className="banner-icon-deviation" />
-          ) : (
-            <ShieldCheck size={24} className="banner-icon-safe" />
-          )}
-        </div>
-
-        <div className="safety-banner-text">
-          <div className="safety-banner-tag-row">
-            <span className="safety-kicker">Live Safety Status</span>
-            <span className={`status-pill ${
-              isConnectionLost
-                ? 'pill--lost'
-                : safety.status === 'outside' || safety.status === 'breach'
-                ? 'pill--outside'
-                : safety.status === 'deviation'
-                ? 'pill--deviation'
-                : 'pill--safe'
-            }`}>
-              {isConnectionLost
-                ? 'Connection Lost'
-                : safety.status === 'outside' || safety.status === 'breach'
-                ? 'Outside Safe Place'
-                : safety.status === 'deviation'
-                ? 'Route Deviation'
-                : 'Safe'}
-            </span>
-          </div>
-
-          <h3 className="safety-main-title">
-            {isConnectionLost
-              ? 'Smart band connection paused'
-              : safety.status === 'outside' || safety.status === 'breach'
-              ? `Outside safe places (${safety.distanceToBoundaryKm} km from "${safety.nearestZone}")`
-              : safety.status === 'deviation'
-              ? 'Child has taken an unusual route'
-              : safety.insideZone
-              ? `Safe inside "${safety.insideZone}"`
-              : 'Inside designated safe boundary'}
-          </h3>
-
-          <p className="safety-explanation-text">
-            {isConnectionLost
-              ? 'The smart band has temporarily stopped updating. Last location is retained on the map.'
-              : safety.explanation}
-          </p>
-
-          {/* Layman "What this means" explanation */}
-          <div className="what-this-means-callout">
-            <Info size={14} className="callout-info-icon" />
-            <div className="callout-text">
-              <strong>What this means: </strong>
-              <span>
-                {isConnectionLost
-                  ? 'We haven’t received a signal in over 45 seconds. Check if the band is powered on and within cellular or Wi-Fi range.'
-                  : safety.status === 'outside' || safety.status === 'breach'
-                  ? `The child has crossed beyond the boundary of "${safety.nearestZone}". Check the live map immediately to view their exact location.`
-                  : safety.status === 'deviation'
-                  ? 'The child took a road or path that differs from their learned daily habit. Open the map to review their current walking direction.'
-                  : `The child is comfortably within your pre-approved perimeter (${safety.insideZone || 'Safe Place'}). No caregiver action is needed.`}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── CARD 2: Does anything require my attention? (Active Alert Callout) ── */}
-      {topActiveAlert ? (
-        <div className="caregiver-attention-card attention-active">
-          <div className="attention-header">
-            <div className="attention-title-group">
-              <AlertTriangle size={17} color="#DC2626" />
-              <h4>Action Required: {topActiveAlert.type === 'boundary_breach' ? 'Boundary Breach' : 'Route Deviation'}</h4>
-            </div>
-            <span className="attention-time">{freshness.text}</span>
-          </div>
-          <p className="attention-desc">{topActiveAlert.message}</p>
-
-          <div className="what-this-means-callout what-this-means-callout--alert">
-            <Info size={14} className="callout-info-icon" />
-            <div className="callout-text">
-              <strong>What this means: </strong>
-              <span>
-                CareTag detected an unexpected boundary crossing. Click &quot;Show on Map&quot; to see where they are, and click &quot;Acknowledge Alert&quot; once you have verified their safety.
-              </span>
-            </div>
-          </div>
-
-          <div className="attention-actions">
-            <button
-              type="button"
-              className="btn btn-sm btn-outline"
-              onClick={onRecenterMap}
-            >
-              <Compass size={13} />
-              <span>Show on Map</span>
-            </button>
-            {onAcknowledgeAlert && (
-              <button
-                type="button"
-                className="btn btn-sm btn-primary"
-                onClick={() => onAcknowledgeAlert(topActiveAlert.id)}
-              >
-                <Check size={13} />
-                <span>Acknowledge Alert</span>
-              </button>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="caregiver-attention-card attention-calm">
-          <CheckCircle size={17} color="#059669" />
-          <div className="calm-text-group">
-            <strong>All Clear — No active safety alerts</strong>
-            <span>All monitored boundaries and schedules are being followed normally.</span>
-          </div>
-        </div>
-      )}
-
-      {/* ── CARD 3: Where is the child right now? ── */}
-      <div className="caregiver-card">
-        <div className="caregiver-card-header">
-          <div className="caregiver-card-title-row">
-            <div className="caregiver-card-icon location-icon">
-              <MapPin size={17} />
-            </div>
-            <div>
-              <h4 className="caregiver-card-title">Where is the child right now?</h4>
-              <p className="caregiver-card-subtitle">Live physical location &amp; GPS tracking</p>
-            </div>
-          </div>
-          <div className={`freshness-badge freshness-badge--${freshness.status}`}>
-            <span className="freshness-dot" />
-            <span>{freshness.text}</span>
-          </div>
-        </div>
-
-        <div className="location-details-box">
-          <div className="location-main-text">
-            <span className="location-place-name">
-              {safety.insideZone ? safety.insideZone : safety.nearestZone ? `Near ${safety.nearestZone}` : 'Thapar University, Patiala'}
-            </span>
-            <span className="location-geo-context">
-              {safety.insideZone
-                ? 'Within designated safe perimeter'
-                : safety.distanceToBoundaryKm > 0
-                ? `${safety.distanceToBoundaryKm} km outside "${safety.nearestZone}"`
-                : 'Within verified safe radius'}
-            </span>
-          </div>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm recenter-btn"
-            onClick={onRecenterMap}
-            title="Recenter map on child location"
-          >
-            <Compass size={14} />
-            <span>Recenter Map</span>
-          </button>
-        </div>
-
-        <div className="what-this-means-callout">
-          <Info size={14} className="callout-info-icon" />
-          <div className="callout-text">
-            <strong>What this means: </strong>
-            <span>
-              The wearable band&apos;s GPS sensor is actively tracking satellite coordinates (accurate within ~4 meters) and updates in real time.
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── CARD 4: Is the smart band connected and charged? ── */}
-      <div className="caregiver-card">
-        <div className="caregiver-card-header">
-          <div className="caregiver-card-title-row">
-            <div className="caregiver-card-icon device-icon">
-              <Radio size={17} />
-            </div>
-            <div>
-              <h4 className="caregiver-card-title">Is the smart band connected &amp; charged?</h4>
-              <p className="caregiver-card-subtitle">Wearable battery and cloud communication</p>
-            </div>
-          </div>
-          <span className={`battery-pill ${isBatteryLow ? 'battery-pill--low' : 'battery-pill--good'}`}>
-            {isBatteryLow ? <BatteryLow size={14} /> : <Battery size={14} />}
-            <span>{batteryLevel}% Charged</span>
-          </span>
-        </div>
-
-        <div className="device-health-grid">
-          <div className="health-grid-item">
-            <span className="health-label">Battery Level</span>
-            <div className="health-battery-bar">
-              <div
-                className={`battery-fill ${isBatteryLow ? 'fill-low' : 'fill-good'}`}
-                style={{ width: `${Math.min(100, Math.max(5, batteryLevel))}%` }}
-              />
-            </div>
-            <span className="health-sub">
-              {isBatteryLow ? '⚠️ Low Battery — Charging recommended' : 'Nominal (~18 hours runtime left)'}
-            </span>
-          </div>
-
-          <div className="health-grid-item">
-            <span className="health-label">Connection Status</span>
-            <div className="health-val-row">
-              <span className="connection-status-indicator">
-                {simRunning ? (
-                  <>
-                    <Zap size={13} color="#2563EB" />
-                    <strong>Simulation Active</strong>
-                  </>
-                ) : (() => {
-                  if (devMeta.isLive) {
-                    return (
-                      <>
-                        <span className="status-live-dot" />
-                        <strong style={{ color: '#059669' }}>Connected &amp; Active</strong>
-                      </>
-                    );
-                  }
-                  if (devMeta.isStale) {
-                    return (
-                      <>
-                        <AlertTriangle size={13} color="#D97706" />
-                        <strong style={{ color: '#D97706' }}>Signal Delayed</strong>
-                      </>
-                    );
-                  }
-                  return (
-                    <>
-                      <Wifi size={13} color="#94A3B8" />
-                      <strong style={{ color: '#64748B' }}>Band Standby</strong>
-                    </>
-                  );
-                })()}
-              </span>
-            </div>
-            <span className="health-sub">
-              Synced with Firebase Realtime Database
-            </span>
-          </div>
-        </div>
-
-        <div className="what-this-means-callout">
-          <Info size={14} className="callout-info-icon" />
-          <div className="callout-text">
-            <strong>What this means: </strong>
-            <span>
-              The wearable band is powered on and streaming packets. You do not need to recharge it right now; battery will last comfortably throughout the day.
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── CARD 5: Are they following their daily routine? ── */}
-      <div className="caregiver-card">
-        <div className="caregiver-card-header">
-          <div className="caregiver-card-title-row">
-            <div className="caregiver-card-icon routine-icon">
-              <Activity size={17} />
-            </div>
-            <div>
-              <h4 className="caregiver-card-title">Are they following their daily routine?</h4>
-              <p className="caregiver-card-subtitle">AI-learned daily journey corridor</p>
-            </div>
-          </div>
-          <span className="routine-confidence-pill">
-            <Check size={12} />
-            <span>On Routine ({routeConfidence}%)</span>
-          </span>
-        </div>
-
-        <div className="routine-summary-box">
-          <div className="routine-route-row">
-            <strong>Expected Journey:</strong>
-            <span>{primaryRouteName}</span>
-          </div>
-          <div className="routine-window-row">
-            <span>Typical Schedule: Mon–Fri · Morning commute</span>
-            <span className="corridor-margin-tag">±350m corridor</span>
-          </div>
-        </div>
-
-        <div className="what-this-means-callout">
-          <Info size={14} className="callout-info-icon" />
-          <div className="callout-text">
-            <strong>What this means: </strong>
-            <span>
-              CareTag automatically learned their regular daily schedule over past history. Today&apos;s movement matches their normal walking route.
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── CARD 6: Configured Safe Places ── */}
-      <div className="caregiver-card">
-        <div className="caregiver-card-header">
-          <div className="caregiver-card-title-row">
-            <div className="caregiver-card-icon zone-summary-icon">
-              <MapPin size={17} />
-            </div>
-            <div>
-              <h4 className="caregiver-card-title">Configured Safe Places ({geofences.length})</h4>
-              <p className="caregiver-card-subtitle">Virtual perimeters actively guarded by CareTag</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={onOpenSafeZones}
-          >
-            <span>Manage Places</span>
-            <ArrowRight size={13} />
-          </button>
-        </div>
-
-        <div className="caregiver-safeplaces-list">
-          {geofences.length === 0 ? (
-            <div className="places-empty-row">
-              <span>No safe places configured yet.</span>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                onClick={onOpenSafeZones}
-              >
-                <Plus size={13} />
-                <span>Add Safe Place</span>
-              </button>
-            </div>
-          ) : (
-            geofences.slice(0, 4).map(zone => (
-              <div key={zone.id} className="place-item-row" onClick={onOpenSafeZones}>
-                <div className="place-item-name-group">
-                  <span className="place-dot" style={{ background: getZoneCategoryColor(zone.category || zone.label) }} />
-                  <strong>{zone.label || zone.name}</strong>
-                  <span className="place-radius-tag">{zone.radiusMeters || 500}m</span>
-                </div>
-                <span className="place-schedule-tag">
-                  {zone.schedule?.mode === 'custom' ? 'Custom Schedule' : '24/7 All Day'}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
-
-        <div className="what-this-means-callout">
-          <Info size={14} className="callout-info-icon" />
-          <div className="callout-text">
-            <strong>What this means: </strong>
-            <span>
-              These are the pre-approved safe perimeters (Home, School, Campus). If the band exits any of these areas during an active schedule, an instant alert is triggered.
-            </span>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

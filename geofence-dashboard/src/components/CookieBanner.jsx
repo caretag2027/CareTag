@@ -31,6 +31,17 @@ export default function CookieBanner() {
     return () => window.removeEventListener('caretag:open-legal', handleOpenLegal);
   }, []);
 
+  // Lock background body scroll when legal document modal is open
+  useEffect(() => {
+    if (legalModalOpen) {
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prevOverflow;
+      };
+    }
+  }, [legalModalOpen]);
+
   const handleAcceptAll = () => {
     try {
       localStorage.setItem(CONSENT_STORAGE_KEY, 'accepted');
@@ -70,6 +81,15 @@ export default function CookieBanner() {
       {!hasConsent && (
         <div className="ct-cookie-banner-wrapper" role="region" aria-label="Cookie and Privacy Notice">
           <div className="ct-cookie-banner">
+            <button
+              type="button"
+              className="ct-cookie-dismiss"
+              onClick={handleEssentialOnly}
+              aria-label="Dismiss cookie notice"
+              title="Dismiss"
+            >
+              <X size={16} />
+            </button>
             <div className="ct-cookie-content">
               <ShieldCheck size={20} className="ct-cookie-icon" />
               <p className="ct-cookie-text">
@@ -133,9 +153,9 @@ export default function CookieBanner() {
           <div className="ct-legal-dialog" onClick={(e) => e.stopPropagation()}>
             <div className="ct-legal-header">
               <div className="ct-legal-title-group">
-                {activeLegalTab === 'privacy' && <Lock size={18} color="#2563EB" />}
-                {activeLegalTab === 'terms' && <FileText size={18} color="#2563EB" />}
-                {activeLegalTab === 'disclaimer' && <AlertTriangle size={18} color="#0D9488" />}
+                {activeLegalTab === 'privacy' && <Lock size={19} color="#2563EB" />}
+                {activeLegalTab === 'terms' && <FileText size={19} color="#2563EB" />}
+                {activeLegalTab === 'disclaimer' && <AlertTriangle size={19} color="#0D9488" />}
                 <h3 id="legal-dialog-title">
                   {activeLegalTab === 'privacy' && 'Privacy Policy'}
                   {activeLegalTab === 'terms' && 'Terms and Conditions'}
@@ -152,7 +172,7 @@ export default function CookieBanner() {
               </button>
             </div>
 
-            {/* Navigation Tabs */}
+            {/* Navigation Tabs (Mobile Responsive Segments) */}
             <div className="ct-legal-tabs" role="tablist">
               <button
                 type="button"
@@ -161,7 +181,8 @@ export default function CookieBanner() {
                 className={`ct-legal-tab ${activeLegalTab === 'privacy' ? 'is-active' : ''}`}
                 onClick={() => setActiveLegalTab('privacy')}
               >
-                Privacy Policy
+                <span className="tab-label-full">Privacy Policy</span>
+                <span className="tab-label-short">Privacy</span>
               </button>
               <button
                 type="button"
@@ -170,7 +191,8 @@ export default function CookieBanner() {
                 className={`ct-legal-tab ${activeLegalTab === 'terms' ? 'is-active' : ''}`}
                 onClick={() => setActiveLegalTab('terms')}
               >
-                Terms &amp; Conditions
+                <span className="tab-label-full">Terms &amp; Conditions</span>
+                <span className="tab-label-short">Terms</span>
               </button>
               <button
                 type="button"
@@ -179,7 +201,8 @@ export default function CookieBanner() {
                 className={`ct-legal-tab ${activeLegalTab === 'disclaimer' ? 'is-active' : ''}`}
                 onClick={() => setActiveLegalTab('disclaimer')}
               >
-                Safety Disclaimer
+                <span className="tab-label-full">Safety Disclaimer</span>
+                <span className="tab-label-short">Disclaimer</span>
               </button>
             </div>
 

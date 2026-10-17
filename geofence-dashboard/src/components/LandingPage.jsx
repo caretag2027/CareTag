@@ -7,13 +7,71 @@ import taggyImg from '../assets/taggy.png';
 import CareTagLogo from './CareTagLogo';
 import HeroRoutineSimulation from './HeroRoutineSimulation';
 
+// Team member profile photos
+import bhavishyaImg from '../assets/team/bhavishya-singla.png';
+import manyaImg from '../assets/team/manya-sharma.png';
+import guneevImg from '../assets/team/guneev-taneja.png';
+import anureetImg from '../assets/team/anureet.jpg';
+import kinjalImg from '../assets/team/kinjal.jpg';
+
+// Standard LinkedIn brand icon
+function LinkedinIcon({ size = 14, className = '' }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.64a1.65 1.65 0 0 0-1.66 1.66 1.66 1.66 0 0 0 1.66 1.66 1.66 1.66 0 0 0 1.66-1.66c0-.92-.74-1.66-1.66-1.66Z" />
+    </svg>
+  );
+}
+
 // Verified Capstone Project Team (Thapar Institute of Engineering & Technology, Batch of 2027)
 const teamMembers = [
-  { id: 1, name: 'Kinjal', initials: 'KS', role: 'Computer Engineering' },
-  { id: 2, name: 'Guneev Taneja', initials: 'GT', role: 'Computer Engineering' },
-  { id: 3, name: 'Bhavishya Singla', initials: 'BS', role: 'Computer Engineering' },
-  { id: 4, name: 'Manya Sharma', initials: 'MS', role: 'Computer Engineering' },
-  { id: 5, name: 'Anureet', initials: 'AN', role: 'Computer Engineering' },
+  {
+    id: 1,
+    name: 'Bhavishya Singla',
+    initials: 'BS',
+    role: 'Computer Engineering',
+    image: bhavishyaImg,
+    linkedin: 'https://www.linkedin.com/in/bhavishyasingla1/',
+  },
+  {
+    id: 2,
+    name: 'Manya Sharma',
+    initials: 'MS',
+    role: 'Computer Engineering',
+    image: manyaImg,
+    linkedin: 'https://www.linkedin.com/in/manya-sharma-0568112a6/',
+  },
+  {
+    id: 3,
+    name: 'Guneev Taneja',
+    initials: 'GT',
+    role: 'Computer Engineering',
+    image: guneevImg,
+    linkedin: 'https://www.linkedin.com/in/guneev-taneja-97b7a11aa/',
+  },
+  {
+    id: 4,
+    name: 'Anureet',
+    initials: 'AN',
+    role: 'Computer Engineering',
+    image: anureetImg,
+    linkedin: 'https://www.linkedin.com/in/anureet-sokhal/',
+  },
+  {
+    id: 5,
+    name: 'Kinjal',
+    initials: 'KS',
+    role: 'Computer Engineering',
+    image: kinjalImg,
+    linkedin: 'https://www.linkedin.com/in/kinjal-tiet/',
+  },
 ];
 
 /**
@@ -95,13 +153,7 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
       {/* ── 2. Modern Airy Hero Section ── */}
       <section className="hero-section">
         <div className="hero-container">
-          {/* Eyebrow Pill */}
-          <div className="hero-eyebrow-badge">
-            <span className="hero-eyebrow-dot" />
-            <span>Context-Aware Child Safety &bull; Thapar University Capstone</span>
-          </div>
-
-          {/* Main Hero Headline */}
+          {/* Main Hero Headline (Single line on desktop) */}
           <h1 className="hero-title">
             Safety that understands <span className="hero-title-highlight">routines.</span>
           </h1>
@@ -281,6 +333,8 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
               <p className="taggy-strip-desc">
                 Friendly guidance for safe-place setup, wearable telemetry status, and contextual safety notifications.
               </p>
+            </div>
+            <div className="taggy-strip-action">
               <button
                 type="button"
                 className="taggy-strip-btn"
@@ -301,7 +355,7 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
         <div className="section-container">
           <div className="section-header text-center">
             <div className="section-eyebrow-pill">
-              <span>ACADEMIC EXCELLENCE &bull; BATCH OF 2027</span>
+              <span>BATCH OF 2027</span>
             </div>
             <h2 className="section-title">The team behind CareTag</h2>
             <p className="section-lead team-subtitle">
@@ -312,9 +366,33 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
           <div className="team-grid">
             {teamMembers.map((member) => (
               <div key={member.id} className="team-card">
-                <div className="team-avatar-initials">{member.initials}</div>
+                <div className="team-avatar-frame">
+                  {member.image ? (
+                    <img
+                      src={member.image}
+                      alt={member.name}
+                      className="team-avatar-img"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="team-avatar-initials">{member.initials}</div>
+                  )}
+                </div>
                 <h3 className="team-name">{member.name}</h3>
                 <span className="team-role">{member.role}</span>
+                {member.linkedin && (
+                  <a
+                    href={member.linkedin}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="team-linkedin-btn"
+                    title={`View ${member.name}'s LinkedIn profile`}
+                    aria-label={`${member.name} on LinkedIn`}
+                  >
+                    <LinkedinIcon size={13} />
+                    <span>LinkedIn</span>
+                  </a>
+                )}
               </div>
             ))}
           </div>

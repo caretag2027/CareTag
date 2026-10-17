@@ -154,4 +154,34 @@ describe('CaregiverOverview Component', () => {
     expect(screen.getByText(/Action Required: Boundary Breach/i)).toBeInTheDocument();
     expect(screen.getByText(/Child stepped outside safe place boundary/i)).toBeInTheDocument();
   });
+
+  test('renders caregiver starting priority cards: Wearable Status, Current Location, Today Journey, and Routine', () => {
+    render(
+      <CaregiverOverview
+        packet={mockPacket}
+        geofences={mockGeofences}
+        alerts={[]}
+        hardwareStatus={mockHardwareStatus}
+        simRunning={false}
+        isLiveHardwareMode={true}
+      />
+    );
+
+    // 1. Wearable Device Active / Live Status
+    expect(screen.getByText(/Is the Smart Band Active & Streaming\?/i)).toBeInTheDocument();
+    expect(screen.getByText(/Wearable Active & Transmitting/i)).toBeInTheDocument();
+    expect(screen.getByText(/Live Data Stream/i)).toBeInTheDocument();
+
+    // 2. Where He Is Right Now
+    expect(screen.getByText(/Where is the Child Right Now\?/i)).toBeInTheDocument();
+    expect(screen.getByText(/Safe Inside Boundary/i)).toBeInTheDocument();
+
+    // 3. First Location Today & Where He Went Today
+    expect(screen.getByText(/Where He Went Today & First Location/i)).toBeInTheDocument();
+    expect(screen.getByText(/First Location Today/i)).toBeInTheDocument();
+    expect(screen.getByText(/Where He Went Today \(Chronological Timeline\)/i)).toBeInTheDocument();
+
+    // 4. Usual Daily Routine
+    expect(screen.getByText(/Are they following their daily routine\?/i)).toBeInTheDocument();
+  });
 });

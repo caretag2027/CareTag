@@ -122,7 +122,7 @@ describe('TechnicalInspector Component', () => {
 
     // Switch to Diagnostics
     fireEvent.click(screen.getByRole('tab', { name: /Firebase & Diagnostics/i }));
-    expect(screen.getByText(/Firebase Realtime Database Diagnostics/i)).toBeInTheDocument();
+    expect(screen.getByText(/Firebase Realtime Database.*Diagnostics/i)).toBeInTheDocument();
   });
 
   test('executes diagnostics probe when button is clicked', async () => {
@@ -149,5 +149,21 @@ describe('TechnicalInspector Component', () => {
     await waitFor(() => {
       expect(diagnoseFirebaseOperations).toHaveBeenCalled();
     });
+  });
+
+  test('renders top Cloud Infrastructure & Write API connectivity console with Test Connections & APIs button', () => {
+    render(
+      <TechnicalInspector
+        packet={mockPacket}
+        geofences={mockGeofences}
+        hardwareStatus={{ connected: true, deviceStatus: 'live' }}
+        simRunning={false}
+      />
+    );
+
+    expect(screen.getByText(/Cloud Infrastructure & API Connectivity/i)).toBeInTheDocument();
+    expect(screen.getByText(/Write & REST APIs/i)).toBeInTheDocument();
+    expect(screen.getByText(/Write, PATCH & DELETE Active/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Test Connections & APIs/i })).toBeInTheDocument();
   });
 });

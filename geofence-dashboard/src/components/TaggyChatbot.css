@@ -8,8 +8,15 @@
   position: fixed;
   bottom: 24px;
   right: 24px;
-  z-index: 99999;
+  z-index: 9990;
   font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  pointer-events: none;
+}
+
+/* ── Interactive Children ── */
+.taggy-launcher-wrap,
+.taggy-chat-window {
+  pointer-events: auto;
 }
 
 /* ── Minimal Floating Launcher ── */
@@ -829,6 +836,10 @@
   .taggy-bot-root {
     bottom: 14px;
     right: 14px;
+    left: auto;
+  }
+
+  .taggy-bot-root.taggy-bot-root--open {
     left: 14px;
   }
 

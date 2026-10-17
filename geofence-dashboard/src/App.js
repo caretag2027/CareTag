@@ -887,12 +887,12 @@ function Dashboard({ session, onLogout, onGoToLanding }) {
                         <MapPin size={14} color={color} />
                         <strong>{zone.label || zone.name}</strong>
                       </div>
-                      <p className="map-popup-sub">
-                        Radius: {zone.radiusMeters || 500}m
-                      </p>
-                      <p className="map-popup-sub">
-                        Schedule: {isEnabled ? (isScheduled ? 'Active Monitoring Now' : 'Schedule Inactive') : 'Disabled'}
-                      </p>
+                      <div className="map-popup-meta-row">
+                        <span className="map-popup-radius-badge">{zone.radiusMeters || 500}m radius</span>
+                        <span className={`map-popup-schedule-badge ${isEnabled && isScheduled ? 'is-active' : 'is-inactive'}`}>
+                          {isEnabled ? (isScheduled ? 'Active Monitoring Now' : 'Schedule Inactive') : 'Monitoring Disabled'}
+                        </span>
+                      </div>
                       <p className="map-popup-coords">
                         {zone.centerLatitude.toFixed(5)}° N, {zone.centerLongitude.toFixed(5)}° E
                       </p>
