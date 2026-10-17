@@ -2,7 +2,7 @@ import {
   AlertTriangle, Bell, CheckCircle,
   Crosshair, LogOut, MapPin,
   Shield, ShieldCheck,
-  Radio, Clock,
+  Radio, Clock, Layers,
   Check, Terminal, Sliders, Maximize2, Minimize2,
   Navigation, X, ChevronDown, Car, Smartphone,
   Plus, Compass, Home
@@ -11,7 +11,7 @@ import {
   Circle, MapContainer, Marker, Popup, TileLayer, useMap, Polyline, useMapEvents
 } from 'react-leaflet';
 import L from 'leaflet';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import api from './api';
 import simulation, { SCENARIO_PRESETS } from './simulation';
 import auth, { DEDICATED_ACCOUNTS } from './auth';
@@ -44,30 +44,28 @@ import {
    Leaflet helpers & device icon
    ────────────────────────────────────────────────────────────── */
 
-function makeDeviceIcon(isAnomaly) {
+function makeDeviceMarkerIcon({ color = '#2563EB', initial = 'L', isAnomaly = false, isOffline = false } = {}) {
+  const markerClass = `device-marker ${isAnomaly ? 'device-marker--alert' : isOffline ? 'device-marker--offline' : ''}`;
+  const coreBg = isAnomaly ? '#DC2626' : color;
+  const pulseHtml = isOffline ? '' : `<div class="device-marker-pulse" style="border-color:${coreBg}; background:radial-gradient(circle, ${coreBg}22 0%, ${coreBg}00 70%);"></div>`;
+  const opacity = isOffline ? '0.78' : '1.0';
+
   return L.divIcon({
     className: '',
-    iconSize: [48, 48],
-    iconAnchor: [24, 24],
-    popupAnchor: [0, -24],
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+    popupAnchor: [0, -22],
     html: `
-      <div class="device-marker ${isAnomaly ? 'device-marker--alert' : ''}">
-        <div class="device-marker-pulse"></div>
-        <div class="device-marker-core">
-          <svg width="22" height="22" viewBox="0 0 100 100" fill="none">
-            <circle cx="34" cy="22" r="10.5" fill="#FFFFFF" />
-            <circle cx="66" cy="28" r="8" fill="#7DD3C7" />
-            <path d="M 33 37 C 16 42, 6 56, 12 73 C 18 87, 34 94, 50 97 C 40 88, 30 76, 30 65 C 30 52, 38 46, 46 53 C 41 44, 38 39, 33 37 Z" fill="#FFFFFF" />
-            <path d="M 66 40 C 77 44, 88 54, 86 68 C 84 80, 71 89, 50 97 C 58 87, 65 77, 65 67 C 65 57, 58 53, 50 61 C 56 49, 61 43, 66 40 Z" fill="#7DD3C7" />
-          </svg>
+      <div class="${markerClass}" style="opacity:${opacity};">
+        ${pulseHtml}
+        <div class="device-marker-core" style="background:${coreBg}; border: 2.5px solid #FFFFFF; box-shadow: 0 4px 12px ${coreBg}66; color: #FFFFFF; font-weight: 700; font-size: 14px; display:flex; align-items:center; justify-content:center;">
+          <span>${initial}</span>
         </div>
       </div>
     `,
   });
 }
 
-const deviceIconNormal = makeDeviceIcon(false);
-const deviceIconAlert = makeDeviceIcon(true);
 
 function makeDraftMarkerIcon() {
   return L.divIcon({
@@ -287,10 +285,15 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
   const accountMenuRef = useRef(null);
   const [showLinkDeviceModal, setShowLinkDeviceModal] = useState(false);
   const [newDeviceKeyInput, setNewDeviceKeyInput] = useState('');
+  const [newNicknameInput, setNewNicknameInput] = useState('');
   const [newChildNameInput, setNewChildNameInput] = useState('');
-  const [newAgeInput, setNewAgeInput] = useState('8');
+  const [newAgeInput] = useState('8');
   const [newRelationInput, setNewRelationInput] = useState('Child');
   const [linkError, setLinkError] = useState('');
+
+  // Map multi-device view filter: 'selected' | 'all'
+  const [mapDeviceFilter, setMapDeviceFilter] = useState('selected');
+  const [allDevicesGeofencesMap, setAllDevicesGeofencesMap] = useState({});
 
   // Close menus on outside click or Escape key
   useEffect(() => {
@@ -315,13 +318,15 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
   // Active Profile metadata derived from selected wearable device
   const activeProfile = devicesList.find(d => d.deviceKey === selectedDeviceKey) || devicesList[0] || {
     deviceKey: selectedDeviceKey,
-    childName: session?.childName || 'Monitored Profile',
-    relation: 'Child',
+    nickname: 'Leon',
+    name: 'Leon',
+    childName: session?.childName || 'Leon',
+    relation: 'Smart Band',
     avatarColor: '#2563EB',
-    hardwareModel: 'ESP32 Smart Band',
+    hardwareModel: 'ESP32-WROOM-32U + NEO-6M',
   };
-  const monitoredName = activeProfile.childName;
-  const deviceDisplayName = `${monitoredName.split(' ')[0]}'s Smart Band (${selectedDeviceKey})`;
+  const activeDeviceNickname = activeProfile.nickname || activeProfile.name || (activeProfile.childName && !['Aarav Singla', 'Diya Singla', 'Kabir Verma'].includes(activeProfile.childName) ? activeProfile.childName : 'Leon');
+  const deviceDisplayName = `${activeDeviceNickname} (${selectedDeviceKey})`;
 
   // Caregiver display identity
   // Authenticated caregiver is presented as "Caregiver" (removing the "Administrator" label from display)
@@ -368,7 +373,7 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
     isHardwareStreaming: false,
     isStale: false,
     statusText: `CONNECTING TO ${selectedDeviceKey}...`,
-    batteryPercent: 92,
+    batteryPercent: null,
   });
 
   // ── Simulation state ──
@@ -527,7 +532,7 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
       isHardwareStreaming: false,
       isStale: false,
       statusText: `CONNECTING TO ${newKey}...`,
-      batteryPercent: 92,
+      batteryPercent: null,
       deviceStatus: DEVICE_STATUS.CONNECTING,
     });
     // Immediately isolate alerts and trip mode to newly selected device
@@ -537,9 +542,20 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
     setSelectedDeviceKey(newKey);
     deviceStore.setActiveDeviceKey(userId, newKey);
     const targetDev = devicesList.find(d => d.deviceKey === newKey);
-    const targetName = targetDev ? targetDev.childName : newKey;
-    pushToast(`Switched active device to ${newKey} (${targetName})`, 'info');
+    const targetName = targetDev ? (targetDev.nickname || targetDev.name || targetDev.childName || newKey) : newKey;
+    pushToast(`Switched active device to ${targetName} (${newKey})`, 'info');
   }, [selectedDeviceKey, userId, devicesList, pushToast]);
+
+  // ── Device Rename Handler ──
+  const handleRenameDevice = useCallback((targetDeviceKey, newNickname) => {
+    const res = deviceStore.updateDeviceNickname(userId, targetDeviceKey, newNickname);
+    if (res.ok) {
+      setDevicesList(res.devices);
+      pushToast(`Device renamed to "${newNickname}"`, 'success');
+    } else {
+      pushToast(res.error || 'Failed to rename device', 'error');
+    }
+  }, [userId, pushToast]);
 
   // ── Link New Device Handler ──
   const handleLinkDeviceSubmit = (e) => {
@@ -547,7 +563,9 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
     setLinkError('');
     const res = deviceStore.linkNewDevice(userId, {
       deviceKey: newDeviceKeyInput,
-      childName: newChildNameInput,
+      nickname: newNicknameInput || newChildNameInput,
+      name: newNicknameInput || newChildNameInput,
+      childName: newNicknameInput || newChildNameInput,
       age: newAgeInput,
       relation: newRelationInput,
     });
@@ -559,9 +577,29 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
     handleSwitchDevice(res.device.deviceKey);
     setShowLinkDeviceModal(false);
     setNewDeviceKeyInput('');
+    setNewNicknameInput('');
     setNewChildNameInput('');
-    pushToast(`Linked ${res.device.deviceKey} (${res.device.childName}) successfully!`, 'success');
+    pushToast(`Linked ${res.device.nickname || res.device.deviceKey} successfully!`, 'success');
   };
+
+  // ── Multi-Device Geofences Synchronization ──
+  useEffect(() => {
+    setAllDevicesGeofencesMap(prev => ({ ...prev, [selectedDeviceKey]: geofences }));
+  }, [selectedDeviceKey, geofences]);
+
+  useEffect(() => {
+    if (mapDeviceFilter === 'all' && devicesList.length > 1) {
+      devicesList.forEach(dev => {
+        if (dev.deviceKey !== selectedDeviceKey) {
+          api.fetchGeofences(dev.deviceKey, userId).then(list => {
+            if (Array.isArray(list)) {
+              setAllDevicesGeofencesMap(prev => ({ ...prev, [dev.deviceKey]: list }));
+            }
+          }).catch(() => {});
+        }
+      });
+    }
+  }, [mapDeviceFilter, devicesList, selectedDeviceKey, userId]);
 
   // ── Real-Time Safe Places Synchronization across users & devices ──
   useEffect(() => {
@@ -884,6 +922,25 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
   // Active top alert (only non-nominal)
   const topAlert = alerts.find(a => !a.acknowledged && a.type !== 'nominal_safety');
 
+  // Multi-device safe places aggregation for map
+  const displayedSafeZones = useMemo(() => {
+    if (mapDeviceFilter === 'selected') {
+      return geofences;
+    }
+    const map = new Map();
+    (geofences || []).forEach(z => map.set(String(z.id), { ...z, deviceKey: z.deviceKey || selectedDeviceKey }));
+    Object.entries(allDevicesGeofencesMap || {}).forEach(([devKey, list]) => {
+      if (Array.isArray(list)) {
+        list.forEach(z => {
+          if (!map.has(String(z.id))) {
+            map.set(String(z.id), { ...z, deviceKey: z.deviceKey || devKey });
+          }
+        });
+      }
+    });
+    return Array.from(map.values());
+  }, [mapDeviceFilter, geofences, allDevicesGeofencesMap, selectedDeviceKey]);
+
   return (
     <div className="caretag-app-shell">
       {/* ── Caregiver Navigation Header ── */}
@@ -1122,6 +1179,36 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
           
           {/* Floating Action Toolbar on Map */}
           <div className="map-floating-toolbar" role="toolbar" aria-label="Map Controls">
+            {/* Multi-device map view filter */}
+            <div className="map-view-filter-group" role="group" aria-label="Device Map Filter">
+              <button
+                type="button"
+                className={`map-toolbar-btn ${mapDeviceFilter === 'selected' ? 'map-toolbar-btn--active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMapDeviceFilter('selected');
+                  pushToast(`Showing map for ${activeDeviceNickname}`, 'info');
+                }}
+                title={`Show only ${activeDeviceNickname} (${selectedDeviceKey})`}
+              >
+                <Radio size={14} />
+                <span className="toolbar-btn-text">{activeDeviceNickname}</span>
+              </button>
+              <button
+                type="button"
+                className={`map-toolbar-btn ${mapDeviceFilter === 'all' ? 'map-toolbar-btn--active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMapDeviceFilter('all');
+                  pushToast(`Showing all devices on map`, 'info');
+                }}
+                title="Show all registered devices and safe places on map"
+              >
+                <Layers size={14} />
+                <span className="toolbar-btn-text">All Devices ({devicesList.length})</span>
+              </button>
+            </div>
+
             <button
               type="button"
               className="map-toolbar-btn"
@@ -1129,12 +1216,12 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
                 e.stopPropagation();
                 if (latest) {
                   setFlyToTarget({ latlng: [latest.lat, latest.lng], timestamp: Date.now() });
-                  pushToast('Centered map on child location', 'info');
+                  pushToast(`Centered map on ${activeDeviceNickname}`, 'info');
                 } else if (geofences[0]) {
                   setFlyToTarget({ latlng: [geofences[0].centerLatitude, geofences[0].centerLongitude], timestamp: Date.now() });
                 }
               }}
-              title="Recenter on Child"
+              title={`Recenter on ${activeDeviceNickname}`}
             >
               <Crosshair size={15} />
               <span className="toolbar-btn-text">Recenter</span>
@@ -1205,13 +1292,19 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
 
             <FlyTo target={flyToTarget} />
 
-            {/* Configured Safe Places */}
-            {geofences.map((zone) => {
+            {/* Configured Safe Places (Device-Scoped or Multi-Device in All mode) */}
+            {displayedSafeZones.map((zone) => {
               const isSelected = selectedZoneId === zone.id;
               const isEnabled = zone.enabled !== false && zone.isActive !== false;
               const isScheduled = isScheduleActive(zone.schedule);
 
-              const color = getZoneCategoryColor(zone.category || zone.label, isEnabled, isScheduled);
+              const owningDevice = devicesList.find(d => d.deviceKey === (zone.deviceKey || zone.deviceId)) || activeProfile;
+              const devColor = owningDevice.avatarColor || '#2563EB';
+              const devNickname = owningDevice.nickname || owningDevice.name || zone.deviceKey || 'Leon';
+
+              const color = mapDeviceFilter === 'all'
+                ? devColor
+                : getZoneCategoryColor(zone.category || zone.label, isEnabled, isScheduled);
 
               return (
                 <Circle
@@ -1221,13 +1314,16 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
                   pathOptions={{
                     color: isSelected ? '#1D4ED8' : color,
                     fillColor: color,
-                    fillOpacity: isSelected ? 0.30 : isScheduled && isEnabled ? 0.16 : 0.06,
+                    fillOpacity: isSelected ? 0.32 : isScheduled && isEnabled ? 0.18 : 0.08,
                     weight: isSelected ? 3.5 : 2,
                     dashArray: isEnabled && isScheduled ? '4 4' : '8 6',
                   }}
                   eventHandlers={{
                     click: () => {
                       setSelectedZoneId(zone.id);
+                      if (zone.deviceKey && zone.deviceKey !== selectedDeviceKey) {
+                        handleSwitchDevice(zone.deviceKey);
+                      }
                       setActiveTab('safezones');
                       setFlyToTarget({ latlng: [zone.centerLatitude, zone.centerLongitude], timestamp: Date.now() });
                     }
@@ -1241,6 +1337,11 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
                       </div>
                       <div className="map-popup-meta-row">
                         <span className="map-popup-radius-badge">{zone.radiusMeters || 500}m radius</span>
+                        <span className="map-popup-dev-badge" style={{ borderColor: devColor, color: devColor }}>
+                          {devNickname} ({zone.deviceKey || selectedDeviceKey})
+                        </span>
+                      </div>
+                      <div className="map-popup-meta-row" style={{ marginTop: '4px' }}>
                         <span className={`map-popup-schedule-badge ${isEnabled && isScheduled ? 'is-active' : 'is-inactive'}`}>
                           {isEnabled ? (isScheduled ? 'Active Monitoring Now' : 'Schedule Inactive') : 'Monitoring Disabled'}
                         </span>
@@ -1307,35 +1408,40 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
               />
             )}
 
-            {/* Recent Movement Trail */}
+            {/* Recent Movement Trail in Active Device Color */}
             {recentTrail.length >= 2 && (
               <Polyline
                 positions={recentTrail}
                 pathOptions={{
-                  color: '#059669',
-                  weight: 3,
+                  color: activeProfile.avatarColor || '#059669',
+                  weight: 3.5,
                   opacity: 0.85,
                 }}
               />
             )}
 
-            {/* Active Child Position Marker */}
+            {/* Active Device Movement Marker with Stable Color & Initial */}
             {latest && (
               <Marker
                 position={[latest.lat, latest.lng]}
-                icon={latest?.packet?.isAnomaly ? deviceIconAlert : deviceIconNormal}
+                icon={makeDeviceMarkerIcon({
+                  color: activeProfile.avatarColor || '#2563EB',
+                  initial: (activeDeviceNickname.trim().charAt(0) || 'L').toUpperCase(),
+                  isAnomaly: Boolean(latest?.packet?.isAnomaly),
+                  isOffline: hardwareStatus.deviceStatus === DEVICE_STATUS.OFFLINE || hardwareStatus.deviceStatus === DEVICE_STATUS.WAITING_FOR_DATA,
+                })}
               >
                 <Popup>
                   <div className="map-popup-card">
                     <div className="map-popup-header">
-                      <ShieldCheck size={14} color="#0D9488" />
+                      <ShieldCheck size={14} color={activeProfile.avatarColor || '#0D9488'} />
                       <strong>{deviceDisplayName}</strong>
                     </div>
                     <p className="map-popup-sub">
-                      Status: {latest.packet?.motionState || 'Normal'}
+                      Status: {latest.packet?.motionState || 'Normal'} &bull; {hardwareStatus.deviceStatus === DEVICE_STATUS.LIVE ? 'Live Hardware' : 'Offline / Last Known'}
                     </p>
                     <p className="map-popup-sub">
-                      Battery: {latest.packet?.batteryPercent ?? 92}% &bull; Speed: {latest.packet?.speedKph ?? 0} km/h
+                      Battery: {latest.packet?.batteryPercent != null ? `${latest.packet.batteryPercent}%` : 'Waiting for battery data'} &bull; Speed: {latest.packet?.speedKph ?? 0} km/h
                     </p>
                     <p className="map-popup-coords">
                       {latest.lat.toFixed(5)}° N, {latest.lng.toFixed(5)}° E
@@ -1348,6 +1454,40 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
               </Marker>
             )}
           </MapContainer>
+
+          {/* Compact Multi-Device Map Legend (Visible in All Devices view) */}
+          {mapDeviceFilter === 'all' && (
+            <div className="map-devices-legend-overlay" aria-label="Authorized Devices Legend">
+              <div className="legend-header">
+                <Layers size={12} className="text-teal" />
+                <span>Authorized Devices ({devicesList.length})</span>
+              </div>
+              <div className="legend-devices-list">
+                {devicesList.map((dev) => {
+                  const isCurrent = dev.deviceKey === selectedDeviceKey;
+                  const devColor = dev.avatarColor || '#2563EB';
+                  const devNick = dev.nickname || dev.name || 'Leon';
+                  return (
+                    <button
+                      key={dev.deviceKey}
+                      type="button"
+                      className={`legend-device-chip ${isCurrent ? 'is-active-chip' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!isCurrent) handleSwitchDevice(dev.deviceKey);
+                      }}
+                      title={`Switch active view to ${devNick} (${dev.deviceKey})`}
+                    >
+                      <span className="legend-chip-dot" style={{ backgroundColor: devColor }} />
+                      <span className="legend-chip-name">{devNick}</span>
+                      <span className="legend-chip-key">{dev.deviceKey}</span>
+                      {isCurrent && <span className="legend-chip-active-tag">Active</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Map Footer Bar with Source & Attribution */}
           <footer className="map-footer-status">
@@ -1555,6 +1695,7 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
               devicesList={devicesList}
               caregiverName={session?.name || 'Bhavishya Singla'}
               onSwitchDevice={handleSwitchDevice}
+              onRenameDevice={handleRenameDevice}
               onOpenLinkDevice={() => setShowLinkDeviceModal(true)}
               onOpenMap={() => {
                 setActiveTab('map');
@@ -1802,41 +1943,41 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
                 <label>Device Key / Hardware Identifier *</label>
                 <input
                   type="text"
-                  placeholder="e.g. CARE-TAG-04 or ESP32-BAND-02"
+                  placeholder="e.g. CARE-TAG-02, e.g. CARE-TAG-04 or ESP32-BAND-02"
                   value={newDeviceKeyInput}
                   onChange={e => setNewDeviceKeyInput(e.target.value.toUpperCase())}
                   required
                 />
-                <span className="form-hint">Found on the bottom of the band or in the pairing document.</span>
+                <span className="form-hint">Found on the bottom of the band or in the pairing document. Immutable hardware ID.</span>
               </div>
               <div className="form-group">
-                <label>Child / Profile Name *</label>
+                <label>Device Friendly Nickname</label>
                 <input
                   type="text"
-                  placeholder="e.g. Diya Singla"
-                  value={newChildNameInput}
-                  onChange={e => setNewChildNameInput(e.target.value)}
-                  required
+                  placeholder="e.g. Secondary Band, Rover, or Leon 2"
+                  value={newNicknameInput}
+                  onChange={e => setNewNicknameInput(e.target.value)}
                 />
+                <span className="form-hint">A friendly name for this device (not personal identity). If omitted, defaults to the device key.</span>
               </div>
               <div className="form-row-2">
                 <div className="form-group">
-                  <label>Age</label>
+                  <label>Profile Label (Optional)</label>
                   <input
-                    type="number"
-                    min="2"
-                    max="18"
-                    value={newAgeInput}
-                    onChange={e => setNewAgeInput(e.target.value)}
+                    type="text"
+                    placeholder="e.g. Primary Device"
+                    value={newChildNameInput}
+                    onChange={e => setNewChildNameInput(e.target.value)}
                   />
                 </div>
                 <div className="form-group">
-                  <label>Relationship</label>
+                  <label>Usage Category</label>
                   <select value={newRelationInput} onChange={e => setNewRelationInput(e.target.value)}>
-                    <option value="Child">Child</option>
+                    <option value="Child">Child / Youth</option>
                     <option value="Ward">Ward</option>
                     <option value="Student">Student</option>
-                    <option value="Elderly Parent">Elderly Parent</option>
+                    <option value="Elderly Parent">Elderly Care</option>
+                    <option value="Personal">Personal Asset</option>
                   </select>
                 </div>
               </div>

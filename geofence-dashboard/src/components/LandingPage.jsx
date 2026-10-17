@@ -127,28 +127,53 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, onOpenInspe
   }, []);
 
   const handleNavClick = useCallback((targetId) => {
-    setMobileMenuOpen(false);
+    // 1. Immediately release body scroll lock so browser does not block window.scrollTo
+    document.body.style.overflow = '';
+    document.documentElement.style.overflow = '';
+
+    // 2. Synchronize URL hash with the target section
+    if (typeof window !== 'undefined') {
+      if (window.history && window.history.pushState) {
+        window.history.pushState(null, '', `#${targetId}`);
+      } else {
+        window.location.hash = targetId;
+      }
+    }
+
+    // 3. Scroll to target element accounting for the floating mobile header
     const element = document.getElementById(targetId);
     if (element) {
-      const headerOffset = 76;
+      const headerEl = document.querySelector('.floating-header');
+      const headerHeight = headerEl ? headerEl.getBoundingClientRect().height : 56;
+      const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+      const totalOffset = isMobile ? headerHeight + 16 : headerHeight + 24;
       const elementPosition = element.getBoundingClientRect().top;
-      const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+      const offsetPosition = elementPosition + (window.pageYOffset || document.documentElement.scrollTop || 0) - totalOffset;
+
       window.scrollTo({
-        top: Math.max(0, offsetPosition),
+        top: Math.max(0, Math.round(offsetPosition)),
         behavior: 'smooth'
       });
     }
+
+    // 4. Close mobile menu AFTER navigation action has been initiated
+    requestAnimationFrame(() => {
+      setMobileMenuOpen(false);
+    });
   }, []);
 
   // Lock background scroll when mobile menu is open
   useEffect(() => {
     if (mobileMenuOpen) {
       document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
     }
     return () => {
       document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
     };
   }, [mobileMenuOpen]);
 
@@ -161,6 +186,8 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, onOpenInspe
           <div
             className="floating-brand"
             onClick={() => {
+              document.body.style.overflow = '';
+              document.documentElement.style.overflow = '';
               setMobileMenuOpen(false);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
@@ -232,7 +259,7 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, onOpenInspe
               aria-label={session ? 'Go to Dashboard' : 'Open dashboard'}
             >
               <span className="btn-cta-text-full">{session ? 'Go to Dashboard' : 'Open dashboard'}</span>
-              <span className="btn-cta-text-compact">{session ? 'Dashboard' : 'Open'}</span>
+              <span className="btn-cta-text-compact">Dashboard</span>
               <ArrowRight size={14} />
             </button>
 
@@ -255,7 +282,11 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, onOpenInspe
           <>
             <div
               className="mobile-menu-backdrop"
-              onClick={() => setMobileMenuOpen(false)}
+              onClick={() => {
+                document.body.style.overflow = '';
+                document.documentElement.style.overflow = '';
+                setMobileMenuOpen(false);
+              }}
               aria-hidden="true"
             />
             <div
@@ -264,6 +295,24 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, onOpenInspe
               aria-modal="true"
               aria-label="Mobile Navigation"
             >
+              {/* Drawer Header with Title and Close Button */}
+              <div className="mobile-menu-header">
+                <span className="mobile-menu-header-title">Menu</span>
+                <button
+                  type="button"
+                  className="mobile-menu-close-btn"
+                  onClick={() => {
+                    document.body.style.overflow = '';
+                    document.documentElement.style.overflow = '';
+                    setMobileMenuOpen(false);
+                  }}
+                  aria-label="Close navigation menu"
+                  title="Close menu"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
               {/* Group 1: Navigation Links */}
               <div className="mobile-menu-group">
                 <span className="mobile-menu-group-label">Navigation</span>
@@ -311,14 +360,24 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, onOpenInspe
                 <>
                   <div className="mobile-menu-group">
                     <span className="mobile-menu-group-label">Caregiver Account</span>
-                    <div className="mobile-user-card">
+                    <button
+                      type="button"
+                      className="mobile-user-card"
+                      onClick={() => {
+                        document.body.style.overflow = '';
+                        document.documentElement.style.overflow = '';
+                        setMobileMenuOpen(false);
+                        onLaunchDashboard();
+                      }}
+                      title="Open Caregiver Dashboard"
+                    >
                       <div className="header-avatar-circle">{userInitial}</div>
                       <div className="mobile-user-details">
                         <strong className="mobile-user-name">{userName}</strong>
                         {session.email && <span className="mobile-user-email">{session.email}</span>}
                         <span className="mobile-user-badge">Caregiver</span>
                       </div>
-                    </div>
+                    </button>
                   </div>
                   <div className="mobile-menu-divider" />
                 </>
@@ -330,6 +389,8 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, onOpenInspe
                   type="button"
                   className="btn-hero-primary mobile-menu-cta"
                   onClick={() => {
+                    document.body.style.overflow = '';
+                    document.documentElement.style.overflow = '';
                     setMobileMenuOpen(false);
                     onLaunchDashboard();
                   }}
@@ -342,6 +403,8 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, onOpenInspe
                   type="button"
                   className="mobile-taggy-btn"
                   onClick={() => {
+                    document.body.style.overflow = '';
+                    document.documentElement.style.overflow = '';
                     setMobileMenuOpen(false);
                     window.dispatchEvent(new CustomEvent('caretag:open-taggy'));
                   }}
@@ -359,6 +422,8 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, onOpenInspe
                     type="button"
                     className="mobile-logout-btn"
                     onClick={() => {
+                      document.body.style.overflow = '';
+                      document.documentElement.style.overflow = '';
                       setMobileMenuOpen(false);
                       if (onLogout) onLogout();
                     }}
@@ -370,6 +435,8 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, onOpenInspe
                     type="button"
                     className="btn-mobile-secondary"
                     onClick={() => {
+                      document.body.style.overflow = '';
+                      document.documentElement.style.overflow = '';
                       setMobileMenuOpen(false);
                       onOpenAuth();
                     }}
@@ -744,6 +811,7 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, onOpenInspe
 
           <div className="footer-bottom">
             <p className="footer-copyright">&copy; {new Date().getFullYear()} CareTag. All rights reserved.</p>
+            <div className="footer-legal-divider" aria-hidden="true" />
             <div className="footer-legal-links" aria-label="Legal and Compliance">
               <button
                 type="button"

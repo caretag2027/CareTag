@@ -37,21 +37,23 @@ export function saveBatterySnapshot(userId, batteryPercent, deviceKey = 'SIM-DEV
 }
 
 /**
- * Load full battery history.
+ * Load battery history, optionally scoped to a specific device.
  */
-export function loadBatteryHistory(userId) {
+export function loadBatteryHistory(userId, deviceKey = null) {
   try {
     const key = userKey(userId, 'battery');
-    return JSON.parse(localStorage.getItem(key)) || [];
+    const all = JSON.parse(localStorage.getItem(key)) || [];
+    if (!deviceKey) return all;
+    return all.filter(h => !h.deviceKey || h.deviceKey === deviceKey);
   } catch { return []; }
 }
 
 /**
- * Get battery statistics.
+ * Get battery statistics scoped to a device.
  * @returns {{ current, min, max, avg, totalReadings, lowEvents, trend, recentReadings }}
  */
-export function getBatteryStats(userId) {
-  const history = loadBatteryHistory(userId);
+export function getBatteryStats(userId, deviceKey = null) {
+  const history = loadBatteryHistory(userId, deviceKey);
 
   if (history.length === 0) {
     return {

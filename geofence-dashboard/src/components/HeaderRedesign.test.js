@@ -77,11 +77,12 @@ describe('Header Redesign & Caregiver-Device Architecture Tests', () => {
     name: 'Bhavishya Singla',
     email: 'singla_be23@thapar.edu',
     role: 'admin', // backend role is admin, but presented as Caregiver in dashboard
-    deviceKey: 'CARE-TAG-02',
+    deviceKey: 'CARE-TAG-01',
     institution: 'Thapar Institute of Engineering & Technology',
   };
 
   beforeEach(() => {
+    window.scrollTo = jest.fn();
     localStorage.clear();
     localStorage.setItem('caretag.session', JSON.stringify(caregiverSession));
     localStorage.setItem(`caretag_setup_completed_${caregiverSession.userId}`, 'true');
@@ -92,7 +93,7 @@ describe('Header Redesign & Caregiver-Device Architecture Tests', () => {
     );
     localStorage.setItem(
       `caretag.${caregiverSession.userId}.selectedDeviceKey`,
-      'CARE-TAG-02'
+      'CARE-TAG-01'
     );
   });
 
@@ -128,7 +129,7 @@ describe('Header Redesign & Caregiver-Device Architecture Tests', () => {
     await renderDashboard();
 
     // Check device count badge in selector (desktop and/or mobile)
-    const countBadges = screen.getAllByText('Devices (3)');
+    const countBadges = screen.getAllByText('Devices (1)');
     expect(countBadges.length).toBeGreaterThan(0);
     expect(countBadges[0]).toBeInTheDocument();
   });
@@ -151,6 +152,14 @@ describe('Header Redesign & Caregiver-Device Architecture Tests', () => {
 
   // Acceptance Criterion 4: Selecting a device automatically resolves the monitored person
   test('criterion 4: selecting a device from the dropdown resolves its associated monitored person', async () => {
+    const multiDevices = [
+      { id: 'dev_leon_01', deviceKey: 'CARE-TAG-01', nickname: 'Leon', name: 'Leon', childName: 'Aarav Singla', avatarColor: '#2563EB', isUserAdded: true },
+      { id: 'dev_diya_02', deviceKey: 'CARE-TAG-02', nickname: 'Diya Singla', name: 'Diya Singla', childName: 'Diya Singla', avatarColor: '#EC4899', isUserAdded: true },
+      { id: 'dev_kabir_03', deviceKey: 'CARE-TAG-03', nickname: 'Kabir Verma', name: 'Kabir Verma', childName: 'Kabir Verma', avatarColor: '#10B981', isUserAdded: true },
+    ];
+    localStorage.setItem(`caretag.${caregiverSession.userId}.devices`, JSON.stringify(multiDevices));
+    localStorage.setItem(`caretag.${caregiverSession.userId}.selectedDeviceKey`, 'CARE-TAG-02');
+
     await renderDashboard();
 
     // Initially CARE-TAG-02 is selected -> Diya Singla
@@ -165,24 +174,31 @@ describe('Header Redesign & Caregiver-Device Architecture Tests', () => {
     const dropdown = screen.getByRole('dialog', { name: /Caregiver Authorized Devices|Switch Monitored Person/i });
     expect(dropdown).toBeInTheDocument();
 
-    // Check device options: CARE-TAG-01 (Aarav), CARE-TAG-02 (Diya), CARE-TAG-03 (Kabir)
-    expect(within(dropdown).getByText('Aarav Singla')).toBeInTheDocument();
+    // Check device options: CARE-TAG-01 (Leon), CARE-TAG-02 (Diya), CARE-TAG-03 (Kabir)
+    expect(within(dropdown).getByText('Leon')).toBeInTheDocument();
     expect(within(dropdown).getByText('Diya Singla')).toBeInTheDocument();
     expect(within(dropdown).getByText('Kabir Verma')).toBeInTheDocument();
 
-    // Switch to CARE-TAG-01 (Aarav Singla)
-    const aaravBtn = within(dropdown).getByText('Aarav Singla').closest('button');
-    fireEvent.click(aaravBtn);
+    // Switch to CARE-TAG-01 (Leon)
+    const leonBtn = within(dropdown).getByText('Leon').closest('button');
+    fireEvent.click(leonBtn);
 
-    // After switching, the dashboard and header reflect CARE-TAG-01 and Aarav Singla
+    // After switching, the dashboard and header reflect CARE-TAG-01 and Leon
     await waitFor(() => {
-      expect(screen.getAllByText(/Aarav Singla/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Leon/i).length).toBeGreaterThan(0);
       expect(screen.getAllByText(/CARE-TAG-01/i).length).toBeGreaterThan(0);
     });
   });
 
   // Acceptance Criterion 5 & 6: Data synchronization & state isolation across device switches
   test('criterion 5 & 6: switching devices updates device-dependent telemetry and isolates data', async () => {
+    const multiDevices = [
+      { id: 'dev_leon_01', deviceKey: 'CARE-TAG-01', nickname: 'Leon', name: 'Leon', childName: 'Aarav Singla', avatarColor: '#2563EB', isUserAdded: true },
+      { id: 'dev_diya_02', deviceKey: 'CARE-TAG-02', nickname: 'Diya Singla', name: 'Diya Singla', childName: 'Diya Singla', avatarColor: '#EC4899', isUserAdded: true },
+    ];
+    localStorage.setItem(`caretag.${caregiverSession.userId}.devices`, JSON.stringify(multiDevices));
+    localStorage.setItem(`caretag.${caregiverSession.userId}.selectedDeviceKey`, 'CARE-TAG-02');
+
     // Add device-scoped alerts to alertStore
     alertStore.saveAlert(caregiverSession.userId, {
       type: 'boundary_breach',
@@ -205,8 +221,8 @@ describe('Header Redesign & Caregiver-Device Architecture Tests', () => {
     const devicePill = document.querySelector('.device-selector-pill');
     fireEvent.click(devicePill);
     const dropdown = screen.getByRole('dialog', { name: /Caregiver Authorized Devices|Switch Monitored Person/i });
-    const aaravBtn = within(dropdown).getByText('Aarav Singla').closest('button');
-    fireEvent.click(aaravBtn);
+    const leonBtn = within(dropdown).getByText('Leon').closest('button');
+    fireEvent.click(leonBtn);
 
     // Verify switch occurred cleanly
     await waitFor(() => {
@@ -230,6 +246,12 @@ describe('Header Redesign & Caregiver-Device Architecture Tests', () => {
 
   // Acceptance Criterion 9: Mobile device selector is present and usable for narrow screens
   test('criterion 9: device selector is present, touch-friendly, and accessible for mobile screens', async () => {
+    const multiDevices = [
+      { id: 'dev_leon_01', deviceKey: 'CARE-TAG-01', nickname: 'Leon', name: 'Leon', childName: 'Aarav Singla', avatarColor: '#2563EB', isUserAdded: true },
+      { id: 'dev_diya_02', deviceKey: 'CARE-TAG-02', nickname: 'Diya Singla', name: 'Diya Singla', childName: 'Diya Singla', avatarColor: '#EC4899', isUserAdded: true },
+    ];
+    localStorage.setItem(`caretag.${caregiverSession.userId}.devices`, JSON.stringify(multiDevices));
+
     await renderDashboard();
 
     // The unified device selector pill is present in the Currently Monitoring card
@@ -242,7 +264,7 @@ describe('Header Redesign & Caregiver-Device Architecture Tests', () => {
     const dropdown = screen.getByRole('dialog', { name: /Caregiver Authorized Devices|Switch Monitored Person/i });
     expect(dropdown).toBeInTheDocument();
     expect(within(dropdown).getByText('Diya Singla')).toBeInTheDocument();
-    expect(within(dropdown).getByText('Aarav Singla')).toBeInTheDocument();
+    expect(within(dropdown).getByText('Leon')).toBeInTheDocument();
   });
 
   // "+ Link another device" modal opens from dropdown
@@ -257,7 +279,7 @@ describe('Header Redesign & Caregiver-Device Architecture Tests', () => {
 
     // Modal opens
     expect(screen.getByRole('heading', { name: /Link New Smart Band/i })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/e\.g\. CARE-TAG-04/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/e\.g\. CARE-TAG/i)).toBeInTheDocument();
   });
 
   // Empty state handling
