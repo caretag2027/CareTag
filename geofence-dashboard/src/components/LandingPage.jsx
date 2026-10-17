@@ -82,7 +82,7 @@ const teamMembers = [
  * CareTag Blue (#2563EB), Mint/Teal (#14B8A6), ample vertical spacing,
  * and clear visual hierarchy.
  */
-export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) {
+export default function LandingPage({ onLaunchDashboard, onOpenAuth, onOpenInspector, session, onLogout }) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const userName = session?.childName || session?.name || 'Bhavishya Singla';
@@ -140,10 +140,22 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
     }
   }, []);
 
+  // Lock background scroll when mobile menu is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileMenuOpen]);
+
   return (
     <div className="landing-page">
       {/* ── 1. Floating Frosted-Glass Header ── */}
-      <div className="floating-header-wrapper">
+      <div className={`floating-header-wrapper ${mobileMenuOpen ? 'is-menu-open' : ''}`}>
         <header className={`floating-header ${scrolled ? 'is-scrolled' : ''}`}>
           {/* Logo on the left */}
           <div
@@ -217,8 +229,10 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
               type="button"
               className="btn-floating-pill-cta"
               onClick={onLaunchDashboard}
+              aria-label={session ? 'Go to Dashboard' : 'Open dashboard'}
             >
-              <span>{session ? 'Go to Dashboard' : 'Open dashboard'}</span>
+              <span className="btn-cta-text-full">{session ? 'Go to Dashboard' : 'Open dashboard'}</span>
+              <span className="btn-cta-text-compact">{session ? 'Dashboard' : 'Open'}</span>
               <ArrowRight size={14} />
             </button>
 
@@ -236,101 +250,136 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
           </div>
         </header>
 
-        {/* ── Mobile Navigation Dropdown Sheet ── */}
+        {/* ── Mobile Navigation Dropdown Sheet with Backdrop ── */}
         {mobileMenuOpen && (
-          <div className="floating-mobile-menu" role="dialog" aria-modal="true" aria-label="Mobile Navigation">
-            <nav className="mobile-menu-links">
-              <a
-                href="#how-it-works"
-                className="mobile-menu-link"
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleNavClick('how-it-works');
-                }}
-              >
-                <Compass size={17} className="text-blue" />
-                <span>How it works</span>
-              </a>
-              <a
-                href="#features"
-                className="mobile-menu-link"
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleNavClick('features');
-                }}
-              >
-                <Activity size={17} className="text-teal" />
-                <span>Features</span>
-              </a>
-              <a
-                href="#team"
-                className="mobile-menu-link"
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleNavClick('team');
-                }}
-              >
-                <Shield size={17} className="text-blue" />
-                <span>Built by</span>
-              </a>
-            </nav>
+          <>
+            <div
+              className="mobile-menu-backdrop"
+              onClick={() => setMobileMenuOpen(false)}
+              aria-hidden="true"
+            />
+            <div
+              className="floating-mobile-menu"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Mobile Navigation"
+            >
+              {/* Group 1: Navigation Links */}
+              <div className="mobile-menu-group">
+                <span className="mobile-menu-group-label">Navigation</span>
+                <nav className="mobile-menu-links">
+                  <a
+                    href="#how-it-works"
+                    className="mobile-menu-link"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleNavClick('how-it-works');
+                    }}
+                  >
+                    <Compass size={17} className="text-blue" />
+                    <span>How it works</span>
+                  </a>
+                  <a
+                    href="#features"
+                    className="mobile-menu-link"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleNavClick('features');
+                    }}
+                  >
+                    <Activity size={17} className="text-teal" />
+                    <span>Features</span>
+                  </a>
+                  <a
+                    href="#team"
+                    className="mobile-menu-link"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleNavClick('team');
+                    }}
+                  >
+                    <Shield size={17} className="text-blue" />
+                    <span>Built by</span>
+                  </a>
+                </nav>
+              </div>
 
-            <div className="mobile-menu-divider" />
+              <div className="mobile-menu-divider" />
 
-            <div className="mobile-menu-actions">
-              {session ? (
+              {/* Group 2: Account Information (if signed in) */}
+              {session && (
+                <>
+                  <div className="mobile-menu-group">
+                    <span className="mobile-menu-group-label">Caregiver Account</span>
+                    <div className="mobile-user-card">
+                      <div className="header-avatar-circle">{userInitial}</div>
+                      <div className="mobile-user-details">
+                        <strong className="mobile-user-name">{userName}</strong>
+                        {session.email && <span className="mobile-user-email">{session.email}</span>}
+                        <span className="mobile-user-badge">Caregiver</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mobile-menu-divider" />
+                </>
+              )}
+
+              {/* Group 3: Primary & Secondary Actions */}
+              <div className="mobile-menu-group mobile-menu-actions">
                 <button
                   type="button"
-                  className="mobile-menu-user-btn"
+                  className="btn-hero-primary mobile-menu-cta"
                   onClick={() => {
                     setMobileMenuOpen(false);
                     onLaunchDashboard();
                   }}
                 >
-                  <span className="header-avatar-circle">{userInitial}</span>
-                  <div className="mobile-user-info">
-                    <strong>{userName}</strong>
-                    <span>Logged In Profile</span>
-                  </div>
+                  <span>{session ? 'Go to Dashboard' : 'Open dashboard'}</span>
+                  <ArrowRight size={16} />
                 </button>
-              ) : (
+
                 <button
                   type="button"
-                  className="btn-mobile-secondary"
+                  className="mobile-taggy-btn"
                   onClick={() => {
                     setMobileMenuOpen(false);
-                    onOpenAuth();
+                    window.dispatchEvent(new CustomEvent('caretag:open-taggy'));
                   }}
                 >
-                  Sign in
+                  <Sparkles size={15} />
+                  <span>Chat with Taggy Safety AI</span>
                 </button>
-              )}
+              </div>
 
-              <button
-                type="button"
-                className="btn-hero-primary mobile-menu-cta"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onLaunchDashboard();
-                }}
-              >
-                <span>{session ? 'Go to Dashboard' : 'Open dashboard'}</span>
-                <ArrowRight size={16} />
-              </button>
-
-              <button
-                type="button"
-                className="mobile-taggy-btn"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  window.dispatchEvent(new CustomEvent('caretag:open-taggy'));
-                }}
-              >
-                <Sparkles size={15} />
-                <span>Chat with Taggy Safety AI</span>
-              </button>
+              {/* Group 4: Footer Actions (Sign in or Sign Out) */}
+              <div className="mobile-menu-divider" />
+              <div className="mobile-menu-footer-action">
+                {session ? (
+                  <button
+                    type="button"
+                    className="mobile-logout-btn"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      if (onLogout) onLogout();
+                    }}
+                  >
+                    <span>Sign Out</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn-mobile-secondary"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      onOpenAuth();
+                    }}
+                  >
+                    Sign in
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
+          </>
         )}
       </div>
 
@@ -580,16 +629,19 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
           <div className="team-mentor-wrap">
             <div className="team-mentor-card">
               <span className="team-mentor-badge">Faculty Mentors</span>
-              <span className="team-mentor-text">
-                <strong>Dr. Kapil Tomar</strong> &amp; <strong>Dr. Ravindra Kumar</strong>, Associate Professors, CSED
-              </span>
+              <div className="team-mentor-content">
+                <span className="team-mentor-names">
+                  <strong className="mentor-name">Dr. Kapil Tomar</strong> &amp; <strong className="mentor-name">Dr. Ravindra Kumar</strong>
+                </span>
+                <span className="team-mentor-designation">Associate Professors, CSED</span>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* ── 8. Final Closing CTA ── */}
-      <section className="final-cta-section">
+      <section id="action-cta" className="final-cta-section">
         <div className="section-container">
           <div className="final-cta-panel">
             <div className="final-cta-left">
@@ -647,42 +699,46 @@ export default function LandingPage({ onLaunchDashboard, onOpenAuth, session }) 
             </div>
 
             <nav className="footer-nav" aria-label="Footer Navigation">
-              <a
-                href="#how-it-works"
-                className="footer-nav-link"
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleNavClick('how-it-works');
-                }}
-              >
-                How it works
-              </a>
-              <a
-                href="#features"
-                className="footer-nav-link"
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleNavClick('features');
-                }}
-              >
-                Features
-              </a>
-              <a
-                href="#team"
-                className="footer-nav-link"
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleNavClick('team');
-                }}
-              >
-                Built by
-              </a>
-              <button type="button" className="footer-nav-btn" onClick={onLaunchDashboard}>
-                Open dashboard
-              </button>
-              <button type="button" className="footer-nav-btn" onClick={onOpenAuth}>
-                Sign in
-              </button>
+              <div className="footer-nav-primary">
+                <a
+                  href="#how-it-works"
+                  className="footer-nav-link"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleNavClick('how-it-works');
+                  }}
+                >
+                  How it works
+                </a>
+                <a
+                  href="#features"
+                  className="footer-nav-link"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleNavClick('features');
+                  }}
+                >
+                  Features
+                </a>
+                <a
+                  href="#team"
+                  className="footer-nav-link"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleNavClick('team');
+                  }}
+                >
+                  Built by
+                </a>
+              </div>
+              <div className="footer-nav-actions">
+                <button type="button" className="footer-nav-btn" onClick={onLaunchDashboard}>
+                  Open dashboard
+                </button>
+                <button type="button" className="footer-nav-btn" onClick={onOpenAuth}>
+                  Sign in
+                </button>
+              </div>
             </nav>
           </div>
 

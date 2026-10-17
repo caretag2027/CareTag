@@ -929,9 +929,14 @@
     z-index: 2500;
   }
 
+  .taggy-bot-root.taggy-bot-root--landing {
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    right: 14px;
+  }
+
   .taggy-launcher-btn {
-    width: 50px;
-    height: 50px;
+    width: 48px;
+    height: 48px;
   }
 
   .taggy-launcher-callout {

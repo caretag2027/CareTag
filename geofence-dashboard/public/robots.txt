@@ -7,6 +7,10 @@ Allow: /static/
 Allow: /assets/
 Allow: /CareTag_Report.pdf
 Allow: /llms.txt
+Allow: /llm.txt
+Allow: /llms-full.txt
+Allow: /site.webmanifest
+Allow: /favicon.ico
 
 # Private API and telemetry endpoints
 Disallow: /api/

@@ -741,6 +741,10 @@ Allow: /static/
 Allow: /assets/
 Allow: /CareTag_Report.pdf
 Allow: /llms.txt
+Allow: /llm.txt
+Allow: /llms-full.txt
+Allow: /site.webmanifest
+Allow: /favicon.ico
 
 # Private API and telemetry endpoints
 Disallow: /api/
@@ -760,9 +764,21 @@ Sitemap: https://caretag.caretag2027.workers.dev/sitemap.xml
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://caretag.caretag2027.workers.dev/</loc>
-    <lastmod>2026-10-16</lastmod>
+    <lastmod>2026-10-17</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://caretag.caretag2027.workers.dev/llms.txt</loc>
+    <lastmod>2026-10-17</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://caretag.caretag2027.workers.dev/llms-full.txt</loc>
+    <lastmod>2026-10-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://caretag.caretag2027.workers.dev/CareTag_Report.pdf</loc>
@@ -780,35 +796,198 @@ Sitemap: https://caretag.caretag2027.workers.dev/sitemap.xml
       });
     }
 
-    if (url.pathname === '/llms.txt') {
-      const llms = `# CareTag
+    if (url.pathname === '/llms.txt' || url.pathname === '/llm.txt') {
+      const llms = `# CareTag — Safety Beyond Boundaries
 
-> Context-aware child safety companion combining GPS location tracking, safe-zone geofencing, and learned daily routine monitoring.
+> Context-aware child and elderly safety monitoring system combining GPS wearable telemetry, safe-place geofencing, and learned daily routine anomaly detection.
 
-CareTag is an engineering prototype designed for child safety monitoring. It connects an ESP32-based wearable smart band with a caregiver dashboard to evaluate daily commutes and alert caregivers to unexpected movement.
+CareTag is an engineering prototype and connected IoT platform engineered for family safety. It bridges an ESP32-based wearable smart band with an edge-powered caregiver dashboard to monitor daily commutes, enforce safe boundaries, and notify caregivers of unusual movement patterns without alarmist false alarms.
 
 ## Core Capabilities
 
-- **Reported Location Tracking:** Displays device location, timestamp freshness, and battery level.
-- **Safe-Place Geofencing:** Allows caregivers to configure circular safe boundaries around familiar places such as home and school, with optional schedule windows.
-- **Routine-Aware Monitoring:** Evaluates daily movement patterns to detect unusual detours independently of boundary breaches.
-- **Contextual Alerts:** Delivers alerts with deviation confidence, distance to boundaries, and location context without alarmist claims.
-- **Taggy Companion:** A friendly product guide that assists caregivers with setup and alert interpretation.
+- **Real-Time Location & Telemetry Tracking:** Streams device latitude/longitude, timestamp freshness, HDOP precision, satellite fix count, speed, and battery level.
+- **Safe-Place Geofencing:** Empowers caregivers to establish circular safety zones (e.g., Home, School, Daycare, Playground) with custom radii and temporal schedule windows.
+- **Spatio-Temporal Routine Learning:** ML pipeline analyzes habitual movement trajectories to recognize standard travel corridors and flag genuine deviations independently of boundary breaches.
+- **Context-Aware Alert Intelligence:** Evaluates distance to known boundaries, time-of-day expectations, and deviation confidence to deliver calm, actionable alerts without alarmist claims.
+- **Audible Voice Warning System:** Web Speech API voice synthesis provides audible caregiver alerts with intelligent cooldown throttling to prevent alert fatigue.
+- **Battery Health Diagnostics:** Radial gauge and sparkline telemetry showing state-of-charge, discharge trends, and low-battery warnings (< 20%).
+- **Taggy AI Companion:** An approachable robot mascot guiding caregivers through onboarding, geofence setup, and alert triage.
 
-## Architecture
+## System Architecture
 
-- **Wearable Hardware:** ESP32 microcontroller, u-blox Neo-6M GPS receiver, SIM800L GSM module, and MPU-6050 accelerometer/gyroscope.
-- **Edge Backend:** Cloudflare Workers with KV persistence and Firebase Realtime Database telemetry ingestion.
-- **Caregiver Dashboard:** React single-page application with Leaflet mapping and responsive controls.
-- **Machine Learning Pipeline:** Stay-point clustering and routine deviation scoring modeled on habitual trajectory data.
+\`\`\`
+┌────────────────────────────────────────────────────────┐
+│           CareTag Wearable Smart Band (Hardware)        │
+│  ESP32-WROOM-32  │  Neo-6M GPS  │  SIM800L  │ MPU-6050 │
+└───────────────────────────┬────────────────────────────┘
+                            │ Cellular GPRS / HTTP POST
+┌───────────────────────────▼────────────────────────────┐
+│      Cloudflare Workers Edge API (caretag.workers.dev)  │
+│  • Edge KV Storage (CARETAG_KV)                        │
+│  • Firebase Realtime Database Telemetry Bridge         │
+│  • RESTful API (Auth, Geofences, Alerts, Telemetry)    │
+└───────────────────────────┬────────────────────────────┘
+                            │ REST + WebSockets
+┌───────────────────────────▼────────────────────────────┐
+│         Caregiver Dashboard (React Single-Page App)    │
+│  • Interactive Leaflet Map & Geofence Boundary Editor  │
+│  • Real-time Telemetry & Battery Health Gauge          │
+│  • Voice Synthesis Alarms (Web Speech API)             │
+│  • Taggy AI Assistant & Historical Audit Logs          │
+└────────────────────────────────────────────────────────┘
+\`\`\`
 
-## Public Resources
+## Wearable Hardware Specifications
 
-- Website: https://caretag.caretag2027.workers.dev/
-- Project Report: https://caretag.caretag2027.workers.dev/CareTag_Report.pdf
-- Academic Institution: Thapar Institute of Engineering & Technology, Batch of 2027
+- **Microcontroller:** ESP32-WROOM-32 Dual-Core 240MHz with ultra-low-power co-processor for deep-sleep power management.
+- **GPS Receiver:** u-blox Neo-6M module communicating via hardware UART (9600 baud), parsing NMEA-0183 sentences ($GPRMC, $GPGGA).
+- **Cellular / GSM:** SIM800L GPRS module using AT commands over secondary hardware serial to transmit JSON telemetry packets over cellular networks.
+- **Motion Sensor:** MPU-6050 6-axis I2C accelerometer and gyroscope for movement detection, inactivity sleep triggers, and fall detection.
+- **Power System:** 3.7V LiPo rechargeable cell with TP4056 charge controller and ADC resistive voltage divider for precision voltage monitoring.
+
+## Machine Learning Pipeline
+
+1. **Step 1 — Stay-Point Extraction:** Filters raw GPS coordinates using spatio-temporal clustering (distance_threshold = 50m, time_threshold = 15min) to extract meaningful dwell locations.
+2. **Step 2 — Routine Modeling:** Clusters stay-points into semantic anchors (Home, School, Work) and builds probabilistic temporal transition graphs representing habitual commute schedules.
+3. **Step 3 — Anomaly Scoring:** Evaluates live telemetry coordinates against expected spatial corridors and schedule windows, yielding a normalized deviation score (0.00–1.00).
+
+## Telemetry Packet Schema
+
+\`\`\`json
+{
+  "deviceId": "CT-BAND-001",
+  "timestamp": 1729198800,
+  "lat": 30.3538,
+  "lng": 76.3606,
+  "speed": 0.4,
+  "hdop": 1.2,
+  "satellites": 8,
+  "battery": 86,
+  "anomalyScore": 0.08,
+  "sos": false
+}
+\`\`\`
+
+## REST API Endpoints
+
+- \`POST /api/auth/register\` — Create a caregiver account with SHA-256 hashed password.
+- \`POST /api/auth/login\` — Authenticate and receive a session token.
+- \`GET /api/auth/me\` — Verify active session and user profile.
+- \`GET /api/geofences\` — List all configured safe zones for the caregiver.
+- \`POST /api/geofences\` — Create or update a circular safe-place geofence.
+- \`DELETE /api/geofences/:id\` — Delete a geofence.
+- \`POST /api/telemetry/packet\` — Ingest raw sensor telemetry from wearable smart band.
+- \`GET /api/telemetry/latest\` — Fetch latest device coordinates, battery, and status.
+- \`GET /api/alerts\` — Retrieve history of boundary exits, routine anomalies, and low battery events.
+- \`POST /api/alerts/ack\` — Acknowledge one or all active safety alerts.
+- \`GET /api/device/battery\` — Retrieve battery percentage, discharge curve, and low-power events.
+
+## Brand Principles & Safety Ethics
+
+- **Reassurance over Alarmism:** CareTag never labels routine detours as "imminent danger". We use neutral, descriptive labels such as Routine deviation flagged, Outside scheduled boundary, or Review recommended.
+- **Clarity & Transparency:** Distance to nearest safe boundary and anomaly confidence are explicitly displayed.
+- **Privacy by Design:** Telemetry data is isolated per caregiver account and never shared with third-party advertisers.
+
+## Key Links & Documentation
+
+- [CareTag Live Dashboard](https://caretag.caretag2027.workers.dev/): Interactive web application and caregiver monitoring console.
+- [CareTag Technical Report (PDF)](https://caretag.caretag2027.workers.dev/CareTag_Report.pdf): 42-page Capstone engineering specification and hardware schematic.
+- [Full LLM Specification](https://caretag.caretag2027.workers.dev/llms-full.txt): Comprehensive technical documentation for AI models and autonomous agents.
+- [Academic Affiliation](https://www.thapar.edu/): Thapar Institute of Engineering & Technology, Batch of 2027.
 `;
       return new Response(llms, {
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Cache-Control': 'public, max-age=86400',
+        },
+      });
+    }
+
+    if (url.pathname === '/llms-full.txt') {
+      const llmsFull = `# CareTag — Full Technical Specification for AI & LLM Systems
+
+> System documentation, hardware wiring, mathematical models, machine learning pipeline, edge cloud architecture, and API schemas for CareTag.
+
+---
+
+## 1. Executive Summary & Purpose
+
+CareTag is an IoT-enabled, context-aware safety monitoring system tailored for children and seniors. Traditional geofencing solutions only trigger binary alarms when an individual crosses a pre-drawn perimeter. CareTag introduces routine-learning intelligence: an embedded wearable device transmits telemetry to an edge cloud layer that evaluates spatiotemporal trajectories against learned habitual patterns. This enables detection of anomalous behavior (unexpected stops, unusual route departures, or missing scheduled commutes) before a perimeter is ever breached, while minimizing false alarms through contextual confidence metrics.
+
+---
+
+## 2. Hardware Architecture & Firmware
+
+### 2.1 Microcontroller: ESP32-WROOM-32
+- Architecture: 32-bit Xtensa dual-core LX6 @ 240 MHz.
+- Power Management: Deep sleep mode (~10 µA) during periods of detected inactivity; wake-on-motion via MPU-6050 interrupt line.
+- Peripherals: 3x UART, 2x I2C, capacitive touch pins, 12-bit SAR ADC with hardware calibration.
+
+### 2.2 Global Positioning: u-blox Neo-6M GPS
+- Interface: Hardware UART2 (TX: GPIO 17, RX: GPIO 16) @ 9600 baud.
+- Protocols: NMEA-0183 ($GPRMC for time/date/speed/course, $GPGGA for fix quality/satellites/HDOP).
+- Quality Gates: Fix valid (status == 'A'), satellite count >= 4, HDOP <= 2.5. Coordinates outside these thresholds are flagged as low-confidence.
+
+### 2.3 Cellular Connectivity: SIMCom SIM800L GPRS
+- Interface: Hardware UART1 (TX: GPIO 27, RX: GPIO 26) with AT command parser.
+- Network Protocol: GPRS Class 12, Quad-band 850/900/1800/1900 MHz.
+- Transmission Mechanism: Secure HTTP POST payload delivery with auto-reconnect fallback and flash memory ring-buffer queue when disconnected.
+
+### 2.4 Inertial Measurement: MPU-6050 IMU
+- Interface: I2C (SDA: GPIO 21, SCL: GPIO 22) @ 400 kHz.
+- Functionality: Motion wake-up interrupt on GPIO 33; free-fall and abrupt deceleration detection (threshold: > 3.5g); stationary power-conservation state machine.
+
+### 2.5 Power Delivery & ADC Battery Measurement
+- Cell: 3.7V 800mAh rechargeable Lithium Polymer (LiPo).
+- Voltage Divider: 100 kΩ / 100 kΩ precision divider feeding ADC1_CH0 (GPIO 36).
+- Discharge Curve Estimation: V_cell = 2 * V_ADC; SoC(%) = max(0, min(100, ((V_cell - 3.3) / (4.2 - 3.3)) * 100)).
+
+---
+
+## 3. Machine Learning & Anomaly Scoring Pipeline
+
+### 3.1 Step 1: Stay-Point Extraction
+Raw GPS telemetry exhibits noise and jitter. Stay-point extraction condenses continuous coordinates into semantic dwelling episodes where Haversine(p_i, p_i+k) <= 50 meters and delta_t >= 15 minutes.
+
+### 3.2 Step 2: Routine Modeling & Anchor Clustering
+- Anchor Discovery: Stay-points are clustered using DBSCAN (eps = 80m, MinPts = 3) to identify habitual landmarks: Home, School, Extracurricular Center, Relative's House.
+- Transition Graph: Habitual trips between anchors form directed edges characterized by typical departure windows, expected transit duration, and spatial corridors.
+
+### 3.3 Step 3: Real-Time Anomaly Scoring
+When a live packet arrives:
+1. Spatial Geofence Check: Distance to active safe zone.
+2. Corridor Deviation Score: Distance to expected route corridor.
+3. Temporal Deviation: Difference between current time and scheduled commute window.
+4. Composite Deviation Metric: Weighted blend normalized between 0.00 and 1.00.
+
+---
+
+## 4. Edge Backend Architecture (Cloudflare Workers)
+
+- Runtime: V8 isolates on Cloudflare Workers edge network.
+- Persistence: Cloudflare KV (CARETAG_KV) for sessions, geofences, telemetry, and alerts.
+- Live Bridge: Firebase Realtime Database integration for real-time WebSocket pushes to the caregiver UI.
+- Worker Endpoints: Complete CRUD for Auth, Geofences, Telemetry Ingestion, and Alerts.
+
+---
+
+## 5. Web Application & Caregiver UI (React)
+
+- Framework: React SPA with modular store state management (authStore.js, alertStore.js, geofenceStore.js, batteryStore.js).
+- Mapping: Leaflet & React-Leaflet with custom vector markers, pulsers, and editable SVG geofence circles.
+- Audio Alarm: Web Speech API (window.speechSynthesis) announcing contextual descriptions with audio cooldown throttling.
+- Mascot Companion: Taggy robot assistant providing educational hints and guidance.
+
+---
+
+## 6. Official Metadata & Canonical Identifiers
+
+- Official Title: CareTag — Safety Beyond Boundaries | Smart Safety Band & Dashboard
+- Tagline: Safety Beyond Boundaries
+- Primary Typeface: Poppins (fallback: Inter, ui-sans-serif)
+- Official Palette: Navy (#0B2D5B), Blue (#2563EB), Teal (#14B8A6), Mint (#7DD3C7), Sky (#E0F2FE), Lavender (#A78BFA), Surface (#F8FAFC)
+`;
+      return new Response(llmsFull, {
         headers: {
           'Content-Type': 'text/plain; charset=utf-8',
           'Cache-Control': 'public, max-age=86400',

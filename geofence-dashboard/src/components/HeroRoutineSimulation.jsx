@@ -671,8 +671,8 @@ export default function HeroRoutineSimulation() {
         </div>
       </div>
 
-      {/* ── E. Dedicated Reserved Alert Area (Zero layout shift across all days) ── */}
-      <div className="sim-alert-slot" aria-live="polite">
+      {/* ── E. Dedicated Reserved Alert Area ── */}
+      <div className={`sim-alert-slot ${isDeviationDay && hasDeviated ? 'has-alert' : ''}`} aria-live="polite">
         <div className={`compact-alert-card ${isDeviationDay && hasDeviated ? 'alert-card--visible' : 'alert-card--hidden'}`}>
           <div className="alert-card-icon-container">
             <ShieldAlert size={19} className="alert-icon-svg" />

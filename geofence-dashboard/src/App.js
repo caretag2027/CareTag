@@ -225,6 +225,11 @@ function App() {
             onOpenAuth={() => setView('auth')}
             onOpenInspector={handleOpenInspector}
             session={session}
+            onLogout={() => {
+              auth.logout();
+              setSession(null);
+              setView('landing');
+            }}
           />
           <TaggyChatbot
             currentView="landing"
@@ -962,7 +967,7 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
             </button>
 
             {isAccountMenuOpen && (
-              <div className="account-menu-dropdown" role="menu">
+              <div className="account-menu-dropdown" role="menu" aria-label="Caregiver Account Actions">
                 <div className="account-user-card">
                   <div className="account-user-avatar">
                     <span>{caregiverInitial}</span>
@@ -979,47 +984,53 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
 
                 <div className="account-menu-divider" />
 
-                <button
-                  type="button"
-                  className="account-menu-item"
-                  onClick={() => {
-                    setIsAccountMenuOpen(false);
-                    setNewChildNameInput('');
-                    setShowLinkDeviceModal(true);
-                  }}
-                  role="menuitem"
-                >
-                  <Plus size={14} />
-                  <span>Link another Smart Band</span>
-                </button>
+                <div className="account-menu-actions">
+                  <button
+                    type="button"
+                    className="account-menu-item account-menu-item--primary"
+                    onClick={() => {
+                      setIsAccountMenuOpen(false);
+                      setNewChildNameInput('');
+                      setShowLinkDeviceModal(true);
+                    }}
+                    role="menuitem"
+                  >
+                    <span className="account-item-icon icon--teal">
+                      <Plus size={15} />
+                    </span>
+                    <span className="account-item-label">Link Another Smart Band</span>
+                  </button>
 
-                <button
-                  type="button"
-                  className="account-menu-item"
-                  onClick={() => {
-                    setIsAccountMenuOpen(false);
-                    setShowSetupWizard(true);
-                  }}
-                  role="menuitem"
-                >
-                  <Sliders size={14} />
-                  <span>Guided Device Setup</span>
-                </button>
+                  <button
+                    type="button"
+                    className="account-menu-item"
+                    onClick={() => {
+                      setIsAccountMenuOpen(false);
+                      setShowSetupWizard(true);
+                    }}
+                    role="menuitem"
+                  >
+                    <span className="account-item-icon icon--blue">
+                      <Sliders size={15} />
+                    </span>
+                    <span className="account-item-label">Guided Device Setup</span>
+                  </button>
 
-                <div className="account-menu-divider" />
-
-                <button
-                  type="button"
-                  className="account-menu-item"
-                  onClick={() => {
-                    setIsAccountMenuOpen(false);
-                    if (onGoToLanding) onGoToLanding();
-                  }}
-                  role="menuitem"
-                >
-                  <Home size={14} />
-                  <span>CareTag Homepage</span>
-                </button>
+                  <button
+                    type="button"
+                    className="account-menu-item"
+                    onClick={() => {
+                      setIsAccountMenuOpen(false);
+                      if (onGoToLanding) onGoToLanding();
+                    }}
+                    role="menuitem"
+                  >
+                    <span className="account-item-icon icon--navy">
+                      <Home size={15} />
+                    </span>
+                    <span className="account-item-label">CareTag Homepage</span>
+                  </button>
+                </div>
 
                 <div className="account-menu-divider" />
 
@@ -1032,8 +1043,10 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
                   }}
                   role="menuitem"
                 >
-                  <LogOut size={14} />
-                  <span>Sign Out</span>
+                  <span className="account-item-icon icon--danger">
+                    <LogOut size={15} />
+                  </span>
+                  <span className="account-item-label">Sign Out</span>
                 </button>
               </div>
             )}

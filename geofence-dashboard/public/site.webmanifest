@@ -1,0 +1,29 @@
+{
+  "name": "CareTag — Safety Beyond Boundaries",
+  "short_name": "CareTag",
+  "description": "Context-aware safety monitoring for children and seniors with intelligent geofencing, wearable telemetry, and routine deviation alerts.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8FAFC",
+  "theme_color": "#0B2D5B",
+  "icons": [
+    {
+      "src": "/favicon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

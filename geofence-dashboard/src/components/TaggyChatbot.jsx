@@ -991,7 +991,7 @@ Click **Sign In** below to proceed to the caregiver login page.`,
   const starterQuestions = (currentView === 'landing' ? MARKETING_PRESETS : CAREGIVER_PRESETS).slice(0, 4);
 
   return (
-    <div className={`taggy-bot-root ${isOpen ? 'taggy-bot-root--open' : 'taggy-bot-root--closed'}`}>
+    <div className={`taggy-bot-root ${isOpen ? 'taggy-bot-root--open' : 'taggy-bot-root--closed'} taggy-bot-root--${currentView}`}>
       {/* ── Collapsed Launcher Trigger Button ── */}
       {!isOpen && (
         <div className="taggy-launcher-wrap">

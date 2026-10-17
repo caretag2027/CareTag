@@ -1,0 +1,123 @@
+# CareTag — Full Technical Specification for AI & LLM Systems
+
+> System documentation, hardware wiring, mathematical models, machine learning pipeline, edge cloud architecture, and API schemas for CareTag.
+
+---
+
+## 1. Executive Summary & Purpose
+
+CareTag is an IoT-enabled, context-aware safety monitoring system tailored for children and seniors. Traditional geofencing solutions only trigger binary alarms when an individual crosses a pre-drawn perimeter. CareTag introduces routine-learning intelligence: an embedded wearable device transmits telemetry to an edge cloud layer that evaluates spatiotemporal trajectories against learned habitual patterns. This enables detection of anomalous behavior (unexpected stops, unusual route departures, or missing scheduled commutes) before a perimeter is ever breached, while minimizing false alarms through contextual confidence metrics.
+
+---
+
+## 2. Hardware Architecture & Firmware
+
+### 2.1 Microcontroller: ESP32-WROOM-32
+- **Architecture:** 32-bit Xtensa dual-core LX6 @ 240 MHz.
+- **Power Management:** Deep sleep mode (~10 µA) during periods of detected inactivity; wake-on-motion via MPU-6050 interrupt line.
+- **Peripherals:** 3x UART, 2x I2C, capacitive touch pins, 12-bit SAR ADC with hardware calibration.
+
+### 2.2 Global Positioning: u-blox Neo-6M GPS
+- **Interface:** Hardware UART2 (TX: GPIO 17, RX: GPIO 16) @ 9600 baud.
+- **Protocols:** NMEA-0183 (`$GPRMC` for time/date/speed/course, `$GPGGA` for fix quality/satellites/HDOP).
+- **Quality Gates:** Fix valid (`status == 'A'`), satellite count $\ge 4$, HDOP $\le 2.5$. Coordinates outside these thresholds are flagged as low-confidence.
+
+### 2.3 Cellular Connectivity: SIMCom SIM800L GPRS
+- **Interface:** Hardware UART1 (TX: GPIO 27, RX: GPIO 26) with AT command parser.
+- **Network Protocol:** GPRS Class 12, Quad-band 850/900/1800/1900 MHz.
+- **Transmission Mechanism:** Secure HTTP POST payload delivery with auto-reconnect fallback and flash memory ring-buffer queue when disconnected.
+
+### 2.4 Inertial Measurement: MPU-6050 IMU
+- **Interface:** I2C (SDA: GPIO 21, SCL: GPIO 22) @ 400 kHz.
+- **Functionality:** 
+  - Motion wake-up interrupt on GPIO 33.
+  - Free-fall and abrupt deceleration detection (threshold: $> 3.5g$).
+  - Stationary power-conservation state machine.
+
+### 2.5 Power Delivery & ADC Battery Measurement
+- **Cell:** 3.7V 800mAh rechargeable Lithium Polymer (LiPo).
+- **Voltage Divider:** $100\text{ k}\Omega$ / $100\text{ k}\Omega$ precision divider feeding ADC1_CH0 (GPIO 36).
+- **Discharge Curve Estimation:**
+  $$V_{cell} = 2 \times V_{ADC}$$
+  $$\text{SoC}(\%) = \max(0, \min(100, \frac{V_{cell} - 3.3}{4.2 - 3.3} \times 100))$$
+
+---
+
+## 3. Machine Learning & Anomaly Scoring Pipeline
+
+### 3.1 Step 1: Stay-Point Extraction
+Raw GPS telemetry exhibits noise and jitter. Stay-point extraction condenses continuous coordinates $P = \{p_1, p_2, \dots, p_n\}$ into semantic dwelling episodes $S = \{s_k\}$:
+
+$$s_k = \left( \bar{lat}, \bar{lng}, t_{arrive}, t_{depart} \right)$$
+
+Extraction conditions:
+$$\text{Haversine}(p_i, p_{i+k}) \le D_{thresh} \quad (50\text{ meters})$$
+$$\Delta t = t_{i+k} - t_i \ge T_{thresh} \quad (15\text{ minutes})$$
+
+### 3.2 Step 2: Routine Modeling & Anchor Clustering
+- **Anchor Discovery:** Stay-points are clustered using DBSCAN ($\varepsilon = 80\text{m}, \text{MinPts} = 3$) to identify habitual landmarks: Home, School, Extracurricular Center, Relative's House.
+- **Transition Graph:** Habitual trips between anchors form directed edges $E_{ij} = (A_i, A_j)$ characterized by:
+  - Typical departure window: $[t_{dep}^{min}, t_{dep}^{max}]$
+  - Expected transit duration: $\mu_{dur} \pm 2\sigma_{dur}$
+  - Spatial corridor centerline: Trajectory bounding polygon.
+
+### 3.3 Step 3: Real-Time Anomaly Scoring
+When a live packet $p_t$ arrives:
+1. **Spatial Geofence Check:** Distance to active safe zone $Z$:
+   $$d_{geo} = \text{Haversine}(p_t, C_Z) - R_Z$$
+   If $d_{geo} > 0$, boundary exit event triggered.
+2. **Corridor Deviation Score:** Distance to expected route corridor $L$:
+   $$d_{corridor} = \min_{q \in L} \text{Haversine}(p_t, q)$$
+3. **Temporal Deviation:** Difference between current time and scheduled commute window.
+4. **Composite Deviation Metric (0.00 – 1.00):**
+   $$S_{anomaly} = \alpha \cdot \min\left(1.0, \frac{d_{corridor}}{D_{max}}\right) + \beta \cdot S_{temporal} + \gamma \cdot S_{speed}$$
+   Where $\alpha = 0.5, \beta = 0.3, \gamma = 0.2$.
+
+---
+
+## 4. Edge Backend Architecture (Cloudflare Workers)
+
+- **Runtime:** V8 isolates on Cloudflare Workers edge network.
+- **Persistence:** Cloudflare KV (`CARETAG_KV`):
+  - User session keys: `session:<token>`
+  - Geofence records: `geofences:<userId>`
+  - Device telemetry buffer: `device:<deviceId>:latest`
+  - Alert event store: `alerts:<userId>`
+- **Live Bridge:** Firebase Realtime Database integration for real-time WebSocket pushes to the caregiver UI.
+- **Worker Endpoints:**
+  - `POST /api/auth/register` — User signup with salt and SHA-256.
+  - `POST /api/auth/login` — Session creation.
+  - `GET /api/auth/me` — Authenticated session check.
+  - `GET /api/geofences` — Retrieve user's configured geofences.
+  - `POST /api/geofences` — Upsert geofence (name, lat, lng, radius, color).
+  - `DELETE /api/geofences/:id` — Delete geofence.
+  - `POST /api/telemetry/packet` — Hardware telemetry ingestion.
+  - `GET /api/telemetry/latest` — Realtime coordinates and battery status.
+  - `GET /api/alerts` — Safety event history.
+  - `POST /api/alerts/ack` — Acknowledge alerts.
+  - `GET /api/device/battery` — Battery metrics and historical discharge.
+
+---
+
+## 5. Web Application & Caregiver UI (React)
+
+- **Framework:** React SPA with modular store state management (`authStore.js`, `alertStore.js`, `geofenceStore.js`, `batteryStore.js`).
+- **Mapping:** Leaflet & React-Leaflet with custom vector markers, pulsers, and editable SVG geofence circles.
+- **Audio Alarm:** Web Speech API (`window.speechSynthesis`) announcing contextual descriptions (e.g., *"Notice: device is 850 meters outside Home perimeter"*).
+- **Mascot Companion:** Taggy robot assistant providing educational hints and guidance.
+
+---
+
+## 6. Official Metadata & Canonical Identifiers
+
+- **Official Title:** CareTag — Safety Beyond Boundaries | Smart Safety Band & Dashboard
+- **Tagline:** Safety Beyond Boundaries
+- **Primary Typeface:** Poppins (fallback: Inter, ui-sans-serif)
+- **Official Color Palette:**
+  - Navy (Primary): `#0B2D5B`
+  - Blue (Secondary): `#2563EB`
+  - Teal (Accent): `#14B8A6`
+  - Mint (Light Accent): `#7DD3C7`
+  - Sky (Background): `#E0F2FE`
+  - Lavender (Highlight): `#A78BFA`
+  - Surface: `#F8FAFC`
