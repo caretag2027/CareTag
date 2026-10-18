@@ -64,7 +64,7 @@ export function loadUserDevices(userId) {
       );
       // Ensure CARE-TAG-01 has nickname 'Leon' if not customized by user
       const updated = realOrUserAdded.map(d => {
-        if (d.deviceKey === 'CARE-TAG-01' && (!d.nickname || d.nickname === 'Aarav Singla')) {
+        if (d.deviceKey === 'CARE-TAG-01' && (!d.nickname || d.nickname === 'Aarav Singla' || d.nickname === 'Device 1')) {
           return { ...d, nickname: 'Leon', name: 'Leon', childName: 'Leon' };
         }
         return d;

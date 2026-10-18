@@ -76,7 +76,10 @@ export default function CaregiverOverview({
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [isDiagnosticsExpanded, setIsDiagnosticsExpanded] = useState(false);
 
-  const deviceNickname = activeProfile?.nickname || activeProfile?.childName || activeProfile?.name || 'Leon';
+  const rawNickname = activeProfile?.nickname || activeProfile?.name || activeProfile?.childName;
+  const deviceNickname = (rawNickname && rawNickname !== 'Device 1')
+    ? rawNickname
+    : 'Leon';
   const deviceInitial = (deviceNickname.trim().charAt(0) || 'L').toUpperCase();
   const [renameTargetKey, setRenameTargetKey] = useState(selectedDeviceKey);
   const [renameInput, setRenameInput] = useState(deviceNickname);
@@ -128,17 +131,23 @@ export default function CaregiverOverview({
 
   // Hardware status metadata
   const devMeta = getDeviceStatusMeta(hardwareStatus?.deviceStatus, hardwareStatus?.ageSeconds);
-  const isBandLive = simRunning || devMeta.isLive;
-  const isBandAwaiting = hardwareStatus?.deviceStatus === DEVICE_STATUS.WAITING_FOR_DATA || hardwareStatus?.deviceStatus === DEVICE_STATUS.CONNECTING;
+  const isBandLive = simRunning || devMeta.isLive || Boolean(isLiveHardwareMode) || hardwareStatus?.online === true;
+  const isBandAwaiting = hardwareStatus?.deviceStatus === DEVICE_STATUS.WAITING_FOR_DATA || hardwareStatus?.deviceStatus === DEVICE_STATUS.CONNECTING || hardwareStatus?.status === 'awaiting_data';
 
   const connectionStatusLabel = simRunning
-    ? 'Simulation Stream'
+    ? 'Live Stream'
     : isBandLive
     ? 'Connected'
     : isBandAwaiting
     ? 'Waiting for data'
     : 'Offline';
-  const connectionStatusClass = simRunning || isBandLive ? 'tag--online' : isBandAwaiting ? 'tag--waiting' : 'tag--offline';
+  const connectionStatusClass = simRunning
+    ? 'badge--sim'
+    : isBandLive
+    ? 'badge--connected'
+    : isBandAwaiting
+    ? 'badge--waiting'
+    : 'badge--offline';
 
   // Battery metrics - selected device specific (strictly honest, no fake 92% fallback)
   const rawBattery = packet?.batteryPercent != null ? Number(packet.batteryPercent) : null;
@@ -299,7 +308,6 @@ export default function CaregiverOverview({
         <div className="monitored-context-header">
           <div className="monitored-kicker-wrap">
             <span className="monitored-context-kicker">Currently monitoring</span>
-            <span className={`monitored-status-dot ${isBandLive ? 'dot--active' : 'dot--idle'}`} />
           </div>
           <span className="monitored-caregiver-badge" title={`Signed in as caregiver: ${caregiverName}`}>
             <User size={12} className="caregiver-badge-icon" />
@@ -312,6 +320,8 @@ export default function CaregiverOverview({
             <div
               className="monitored-avatar"
               style={{ backgroundColor: activeProfile?.avatarColor || '#2563EB' }}
+              title={`Device: ${deviceNickname}`}
+              aria-label={`Device ${deviceNickname}`}
             >
               <span>{deviceInitial}</span>
             </div>
@@ -338,7 +348,7 @@ export default function CaregiverOverview({
                 <strong className="device-id-mono">{selectedDeviceKey}</strong>
                 <span className="meta-bullet">&bull;</span>
                 <span className="hardware-model-val">{activeProfile?.hardwareModel || 'ESP32-WROOM-32U + NEO-6M'}</span>
-                {activeProfile?.relation && activeProfile?.relation !== 'Child' && (
+                {activeProfile?.relation && activeProfile?.relation !== 'Child' && activeProfile?.relation !== 'Smart Band' && (
                   <>
                     <span className="meta-bullet">&bull;</span>
                     <span className="relation-tag">{activeProfile.relation}</span>
@@ -346,7 +356,10 @@ export default function CaregiverOverview({
                 )}
               </p>
               <p className="monitored-connection-meta">
-                <span className={`connection-badge ${connectionStatusClass}`}>{connectionStatusLabel}</span>
+                <span className={`device-connection-badge status--${connectionStatusClass}`}>
+                  <span className="status-indicator-dot" />
+                  <span>{connectionStatusLabel}</span>
+                </span>
               </p>
             </div>
           </div>
@@ -361,8 +374,9 @@ export default function CaregiverOverview({
               title={devicesList.length > 1 ? "Switch between authorized Smart Bands" : "Manage authorized Smart Band"}
             >
               <span className="switch-device-badge">Devices ({devicesList.length})</span>
-              <span className="switch-device-text">{devicesList.length > 1 ? 'Switch device' : 'Manage device'}</span>
-              <ChevronDown size={14} />
+              <span className="selector-bullet" aria-hidden="true">&middot;</span>
+              <span className="switch-device-text">{devicesList.length > 1 ? 'Switch / Manage devices' : 'Manage devices'}</span>
+              <ChevronDown size={14} className="selector-chevron" />
             </button>
           </div>
         </div>
@@ -1318,28 +1332,33 @@ export default function CaregiverOverview({
         </div>
       )}
 
-      {/* ── PROFILE & DEVICE SWITCHER BOTTOM SHEET MODAL ── */}
+      {/* ── PROFILE & DEVICE SWITCHER MODAL (Manage devices) ── */}
       {showDeviceModal && (
         <div
           className="caretag-modal-overlay"
           role="dialog"
           aria-modal="true"
-          aria-label="Caregiver Authorized Devices - Switch Monitored Person"
-          aria-labelledby="switch-profile-modal-title"
+          aria-label="Manage devices - Caregiver Authorized Devices - Switch Monitored Person"
           onClick={() => setShowDeviceModal(false)}
         >
           <div
-            className="caretag-modal-card drawer-modal-card device-switch-sheet"
+            className="caretag-modal-card manage-devices-modal"
             onClick={e => e.stopPropagation()}
           >
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <Smartphone size={18} className="text-blue" />
-                <h3 id="switch-profile-modal-title">Caregiver Authorized Devices - Switch Monitored Person</h3>
+            {/* Part 1: Header with title and Close button */}
+            <div className="manage-devices-header">
+              <div className="manage-devices-title-block">
+                <div className="manage-devices-title-row">
+                  <Smartphone size={18} className="manage-devices-header-icon" />
+                  <h3 id="manage-devices-modal-title" className="manage-devices-title">Manage devices</h3>
+                </div>
+                <p className="manage-devices-subtitle">
+                  View your linked Smart Bands, rename a device, or connect another one.
+                </p>
               </div>
               <button
                 type="button"
-                className="modal-close-btn"
+                className="modal-close-btn manage-devices-close-btn"
                 onClick={() => setShowDeviceModal(false)}
                 aria-label="Close dialog"
               >
@@ -1347,11 +1366,14 @@ export default function CaregiverOverview({
               </button>
             </div>
 
-            <div className="device-sheet-content">
-              <p className="device-sheet-subtitle">
-                Caregiver account: <strong>{caregiverName}</strong> ({devicesList.length} registered). Each device maintains its own safe places, battery state, movement history, and alerts.
+            {/* Modal Body: Description, Device List, Actions */}
+            <div className="manage-devices-body">
+              {/* Part 2: Short explanatory text */}
+              <p className="manage-devices-account-desc">
+                Caregiver account: <strong>{caregiverName}</strong> ({devicesList.length} registered). Each Smart Band keeps its own device status, battery data, movement history, safe places, and alerts.
               </p>
 
+              {/* Part 3: List of registered devices */}
               {devicesList.length === 0 ? (
                 <div className="device-switch-empty">
                   <p>No Smart Band devices linked to your account yet.</p>
@@ -1369,78 +1391,77 @@ export default function CaregiverOverview({
                 </div>
               ) : devicesList.length === 1 ? (
                 /* ── Clean Single-Device Management State ── */
-                <div className="single-device-management-card">
-                  <div className="single-dev-hero">
-                    <div
-                      className="single-dev-avatar"
-                      style={{ backgroundColor: devicesList[0].avatarColor || '#2563EB' }}
-                    >
-                      <span>{((devicesList[0].nickname || devicesList[0].name || 'Leon').trim().charAt(0) || 'L').toUpperCase()}</span>
-                    </div>
-                    <div className="single-dev-details">
-                      <div className="single-dev-title-row">
-                        <strong className="single-dev-nickname">{devicesList[0].nickname || devicesList[0].name || 'Leon'}</strong>
-                        <span className={`device-row-tag ${connectionStatusClass}`}>{connectionStatusLabel}</span>
-                        <span className="device-active-badge">Active</span>
-                      </div>
-                      <span className="single-dev-sub">
-                        <span className="device-key-badge">{devicesList[0].deviceKey}</span> &bull; {devicesList[0].hardwareModel || 'ESP32-WROOM-32U + NEO-6M'}
-                      </span>
-                    </div>
-                  </div>
+                <div className="manage-devices-list" role="region" aria-label="Registered Devices">
+                  {(() => {
+                    const dev = devicesList[0];
+                    const rawDevNick = dev.nickname || dev.name || dev.childName;
+                    const devNick = (rawDevNick && rawDevNick !== 'Device 1')
+                      ? rawDevNick
+                      : 'Leon';
+                    const devInitial = (devNick.trim().charAt(0) || 'L').toUpperCase();
 
-                  <div className="single-dev-actions">
-                    <button
-                      type="button"
-                      className="btn-dev-action btn-dev-rename"
-                      onClick={() => {
-                        setShowDeviceModal(false);
-                        setRenameTargetKey(devicesList[0].deviceKey);
-                        setRenameInput(devicesList[0].nickname || devicesList[0].name || 'Leon');
-                        setRenameError('');
-                        setShowRenameModal(true);
-                      }}
-                    >
-                      <Edit2 size={14} />
-                      <span>Rename device</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-dev-action btn-dev-add"
-                      onClick={() => {
-                        setShowDeviceModal(false);
-                        if (onOpenLinkDevice) onOpenLinkDevice();
-                      }}
-                    >
-                      <Plus size={14} />
-                      <span>Link another Smart Band</span>
-                    </button>
-                  </div>
+                    return (
+                      <div className="manage-dev-card is-selected">
+                        <div
+                          className="manage-dev-avatar"
+                          style={{ backgroundColor: dev.avatarColor || '#2563EB' }}
+                          title={`Device: ${devNick}`}
+                          aria-label={`Device ${devNick}`}
+                        >
+                          <span>{devInitial}</span>
+                        </div>
+
+                        <div className="manage-dev-info">
+                          <div className="manage-dev-title-row">
+                            <strong className="manage-dev-name">{devNick}</strong>
+                            <span className="manage-dev-sep" aria-hidden="true">&middot;</span>
+                            <span className="device-selected-badge" title="Currently selected device on dashboard">
+                              <Check size={11} className="badge-check-icon" />
+                              <span>Selected</span>
+                            </span>
+                            <span className={`device-connection-badge status--${connectionStatusClass}`}>
+                              <span className="status-indicator-dot" />
+                              <span>{connectionStatusLabel}</span>
+                            </span>
+                          </div>
+
+                          <div className="manage-dev-hardware-meta">
+                            <code className="device-id-mono">{dev.deviceKey}</code>
+                            <span className="meta-bullet">&bull;</span>
+                            <span className="hardware-model-val">{dev.hardwareModel || 'ESP32-WROOM-32U + NEO-6M'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               ) : (
                 /* ── Multi-Device Selection State ── */
-                <div className="device-switch-grid" role="radiogroup" aria-label="Available Profiles">
+                <div className="manage-devices-list" role="radiogroup" aria-label="Available Profiles">
                   {devicesList.map((dev) => {
                     const isCurrent = dev.deviceKey === selectedDeviceKey;
-                    const devNick = dev.nickname || dev.name || dev.childName || dev.deviceKey;
-                    const initial = (devNick.trim().charAt(0) || 'D').toUpperCase();
+                    const rawDevNick = dev.nickname || dev.name || dev.childName;
+                    const devNick = (rawDevNick && rawDevNick !== 'Device 1')
+                      ? rawDevNick
+                      : (dev.deviceKey === 'CARE-TAG-01' ? 'Leon' : dev.deviceKey);
+                    const devInitial = (devNick.trim().charAt(0) || 'L').toUpperCase();
                     const statusTag = isCurrent
-                      ? (simRunning || isBandLive ? 'tag--online' : isBandAwaiting ? 'tag--waiting' : 'tag--offline')
-                      : 'tag--standby';
+                      ? connectionStatusClass
+                      : 'badge--offline';
                     const statusLabel = isCurrent
-                      ? (simRunning ? 'Live Stream' : isBandLive ? 'Connected' : isBandAwaiting ? 'Waiting for data' : 'Offline')
+                      ? connectionStatusLabel
                       : 'Standby';
 
                     return (
                       <div
                         key={dev.id || dev.deviceKey}
-                        className={`device-switch-row ${isCurrent ? 'is-active-device' : ''}`}
+                        className={`manage-dev-card ${isCurrent ? 'is-selected' : ''}`}
                       >
                         <button
                           type="button"
                           role="radio"
                           aria-checked={isCurrent}
-                          className="device-row-main-btn"
+                          className="manage-dev-main-btn"
                           onClick={() => {
                             if (!isCurrent && onSwitchDevice) {
                               onSwitchDevice(dev.deviceKey);
@@ -1449,33 +1470,42 @@ export default function CaregiverOverview({
                           }}
                         >
                           <div
-                            className="device-row-avatar"
+                            className="manage-dev-avatar"
                             style={{ backgroundColor: dev.avatarColor || '#2563EB' }}
                           >
-                            <span>{initial}</span>
+                            <span>{devInitial}</span>
                           </div>
-                          <div className="device-row-details">
-                            <div className="device-row-top">
-                              <strong className="device-row-name">{devNick}</strong>
-                              <span className={`device-row-tag ${statusTag}`}>{statusLabel}</span>
+                          <div className="manage-dev-info">
+                            <div className="manage-dev-title-row">
+                              <strong className="manage-dev-name">{devNick}</strong>
+                              <span className="manage-dev-sep" aria-hidden="true">&middot;</span>
+                              {isCurrent && (
+                                <span className="device-selected-badge" title="Currently selected device on dashboard">
+                                  <Check size={11} className="badge-check-icon" />
+                                  <span>Selected</span>
+                                </span>
+                              )}
+                              <span className={`device-connection-badge status--${statusTag}`}>
+                                <span className="status-indicator-dot" />
+                                <span>{statusLabel}</span>
+                              </span>
                             </div>
-                            <span className="device-row-sub">
-                              <span className="device-key-badge">{dev.deviceKey}</span> &bull; {dev.hardwareModel || 'ESP32 Smart Band'}
-                            </span>
+                            <div className="manage-dev-hardware-meta">
+                              <code className="device-id-mono">{dev.deviceKey}</code>
+                              <span className="meta-bullet">&bull;</span>
+                              <span className="hardware-model-val">{dev.hardwareModel || 'ESP32 Smart Band'}</span>
+                            </div>
                           </div>
                           {isCurrent ? (
-                            <div className="device-row-checked">
-                              <Check size={14} />
-                              <span>Active</span>
-                            </div>
+                            <span className="manage-dev-current-label">Active</span>
                           ) : (
-                            <span className="device-row-select-btn">Select</span>
+                            <span className="manage-dev-select-pill">Select</span>
                           )}
                         </button>
 
                         <button
                           type="button"
-                          className="device-row-inline-rename-btn"
+                          className="manage-dev-row-rename-btn"
                           onClick={(e) => {
                             e.stopPropagation();
                             setShowDeviceModal(false);
@@ -1495,21 +1525,36 @@ export default function CaregiverOverview({
                 </div>
               )}
 
-              {devicesList.length > 1 && (
-                <div className="device-sheet-actions">
-                  <button
-                    type="button"
-                    className="btn-link-band-modal"
-                    onClick={() => {
-                      setShowDeviceModal(false);
-                      if (onOpenLinkDevice) onOpenLinkDevice();
-                    }}
-                  >
-                    <Plus size={15} />
-                    <span>Link another Smart Band</span>
-                  </button>
-                </div>
-              )}
+              {/* Part 4: Modal Actions */}
+              <div className="manage-devices-actions">
+                <button
+                  type="button"
+                  className="btn-modal-action btn-modal-secondary btn-dev-rename"
+                  onClick={() => {
+                    setShowDeviceModal(false);
+                    setRenameTargetKey(selectedDeviceKey);
+                    setRenameInput(deviceNickname);
+                    setRenameError('');
+                    setShowRenameModal(true);
+                  }}
+                  title={`Rename ${deviceNickname}`}
+                >
+                  <Edit2 size={14} />
+                  <span>Rename device</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn-modal-action btn-modal-primary btn-dev-add btn-link-band-modal"
+                  onClick={() => {
+                    setShowDeviceModal(false);
+                    if (onOpenLinkDevice) onOpenLinkDevice();
+                  }}
+                  title="Link another Smart Band"
+                >
+                  <Plus size={15} />
+                  <span>Link another Smart Band</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -171,7 +171,7 @@ describe('Header Redesign & Caregiver-Device Architecture Tests', () => {
     fireEvent.click(devicePill);
 
     // Dropdown / sheet should be open and list all 3 devices
-    const dropdown = screen.getByRole('dialog', { name: /Caregiver Authorized Devices|Switch Monitored Person/i });
+    const dropdown = screen.getByRole('dialog', { name: /Manage devices|Caregiver Authorized Devices|Switch Monitored Person/i });
     expect(dropdown).toBeInTheDocument();
 
     // Check device options: CARE-TAG-01 (Leon), CARE-TAG-02 (Diya), CARE-TAG-03 (Kabir)
@@ -220,7 +220,7 @@ describe('Header Redesign & Caregiver-Device Architecture Tests', () => {
     // Switch to CARE-TAG-01
     const devicePill = document.querySelector('.device-selector-pill');
     fireEvent.click(devicePill);
-    const dropdown = screen.getByRole('dialog', { name: /Caregiver Authorized Devices|Switch Monitored Person/i });
+    const dropdown = screen.getByRole('dialog', { name: /Manage devices|Caregiver Authorized Devices|Switch Monitored Person/i });
     const leonBtn = within(dropdown).getByText('Leon').closest('button');
     fireEvent.click(leonBtn);
 
@@ -261,7 +261,7 @@ describe('Header Redesign & Caregiver-Device Architecture Tests', () => {
 
     // Clicking device pill opens device dropdown with touch targets
     fireEvent.click(devicePill);
-    const dropdown = screen.getByRole('dialog', { name: /Caregiver Authorized Devices|Switch Monitored Person/i });
+    const dropdown = screen.getByRole('dialog', { name: /Manage devices|Caregiver Authorized Devices|Switch Monitored Person/i });
     expect(dropdown).toBeInTheDocument();
     expect(within(dropdown).getByText('Diya Singla')).toBeInTheDocument();
     expect(within(dropdown).getByText('Leon')).toBeInTheDocument();

@@ -170,7 +170,7 @@ describe('CareTag — Dashboard Visual Polish, Responsive Layout & Dialog Refine
     fireEvent.click(manageBtn);
 
     // Modal dialog opens
-    const dialog = screen.getByRole('dialog', { name: /Caregiver Authorized Devices/i });
+    const dialog = screen.getByRole('dialog', { name: /Manage devices|Caregiver Authorized Devices/i });
     expect(dialog).toBeInTheDocument();
 
     // Displays caregiver name and 1 registered
@@ -178,10 +178,10 @@ describe('CareTag — Dashboard Visual Polish, Responsive Layout & Dialog Refine
     expect(within(dialog).getByText(/Bhavishya Singla/i)).toBeInTheDocument();
     expect(within(dialog).getByText(/\(1 registered\)/i)).toBeInTheDocument();
 
-    // Single device card displays Leon, CARE-TAG-01, and active badge
+    // Single device card displays Leon, CARE-TAG-01, and selection badge
     expect(within(dialog).getByText('Leon')).toBeInTheDocument();
     expect(within(dialog).getByText('CARE-TAG-01')).toBeInTheDocument();
-    expect(within(dialog).getByText('Active')).toBeInTheDocument();
+    expect(within(dialog).getByText(/Selected|Active/i)).toBeInTheDocument();
 
     // Action buttons inside card
     expect(within(dialog).getByRole('button', { name: /Rename device/i })).toBeInTheDocument();
@@ -190,7 +190,7 @@ describe('CareTag — Dashboard Visual Polish, Responsive Layout & Dialog Refine
     // Close dialog
     fireEvent.click(within(dialog).getByRole('button', { name: /Close dialog/i }));
     await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: /Caregiver Authorized Devices/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('dialog', { name: /Manage devices|Caregiver Authorized Devices/i })).not.toBeInTheDocument();
     });
   });
 

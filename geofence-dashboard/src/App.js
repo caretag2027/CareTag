@@ -334,7 +334,11 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
     avatarColor: '#2563EB',
     hardwareModel: 'ESP32-WROOM-32U + NEO-6M',
   };
-  const activeDeviceNickname = activeProfile.nickname || activeProfile.name || (activeProfile.childName && !['Aarav Singla', 'Diya Singla', 'Kabir Verma'].includes(activeProfile.childName) ? activeProfile.childName : 'Leon');
+  const activeDeviceNickname = (activeProfile.nickname && activeProfile.nickname !== 'Device 1' && !['Aarav Singla', 'Diya Singla', 'Kabir Verma'].includes(activeProfile.nickname))
+    ? activeProfile.nickname
+    : (activeProfile.name && activeProfile.name !== 'Device 1' && !['Aarav Singla', 'Diya Singla', 'Kabir Verma'].includes(activeProfile.name))
+    ? activeProfile.name
+    : (activeProfile.childName && !['Aarav Singla', 'Diya Singla', 'Kabir Verma', 'Device 1'].includes(activeProfile.childName) ? activeProfile.childName : 'Leon');
   const deviceDisplayName = `${activeDeviceNickname} (${selectedDeviceKey})`;
 
   // Caregiver display identity
