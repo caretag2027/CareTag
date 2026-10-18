@@ -31,11 +31,11 @@ export const DEVICE_PALETTE = [
  */
 export const DEFAULT_DEVICES = [
   {
-    id: 'dev_leon_01',
+    id: 'dev_caretag_01',
     deviceKey: 'CARE-TAG-01',
-    nickname: 'Leon',
-    name: 'Leon',
-    childName: 'Leon',
+    nickname: 'CareTag 1',
+    name: 'CareTag 1',
+    childName: 'CareTag 1',
     age: 8,
     relation: 'Smart Band',
     avatarColor: '#2563EB',
@@ -62,10 +62,10 @@ export function loadUserDevices(userId) {
       const realOrUserAdded = stored.filter(d => 
         d.deviceKey === 'CARE-TAG-01' || d.isUserAdded || (!['dev_diya_02', 'dev_kabir_03'].includes(d.id) && !['Diya Singla', 'Kabir Verma'].includes(d.childName))
       );
-      // Ensure CARE-TAG-01 has nickname 'Leon' if not customized by user
+      // Ensure CARE-TAG-01 has default nickname 'CareTag 1' if not customized by user
       const updated = realOrUserAdded.map(d => {
         if (d.deviceKey === 'CARE-TAG-01' && (!d.nickname || d.nickname === 'Aarav Singla' || d.nickname === 'Device 1')) {
-          return { ...d, nickname: 'Leon', name: 'Leon', childName: 'Leon' };
+          return { ...d, nickname: 'CareTag 1', name: 'CareTag 1', childName: 'CareTag 1' };
         }
         return d;
       });

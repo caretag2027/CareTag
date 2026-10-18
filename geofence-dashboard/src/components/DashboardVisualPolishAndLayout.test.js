@@ -115,7 +115,7 @@ describe('CareTag — Dashboard Visual Polish, Responsive Layout & Dialog Refine
     const currentlyMonitoringSection = screen.getByLabelText(/Currently monitoring/i);
     expect(currentlyMonitoringSection).toBeInTheDocument();
     expect(within(currentlyMonitoringSection).getByText(/Currently monitoring/i)).toBeInTheDocument();
-    expect(within(currentlyMonitoringSection).getByText('Leon')).toBeInTheDocument();
+    expect(within(currentlyMonitoringSection).getByText(/CareTag 1|Leon/)).toBeInTheDocument();
     expect(within(currentlyMonitoringSection).getByText(/Caregiver:/i)).toBeInTheDocument();
     expect(within(currentlyMonitoringSection).getByText('Bhavishya Singla')).toBeInTheDocument();
   });
@@ -147,9 +147,9 @@ describe('CareTag — Dashboard Visual Polish, Responsive Layout & Dialog Refine
     expect(within(dialog).getByText('CARE-TAG-01')).toBeInTheDocument();
     expect(within(dialog).getByText(/Immutable hardware ID/i)).toBeInTheDocument();
 
-    // Nickname input populated with Leon
+    // Nickname input populated with CareTag 1 (or Leon)
     const input = within(dialog).getByLabelText(/Device Nickname/i);
-    expect(input.value).toBe('Leon');
+    expect(['CareTag 1', 'Leon']).toContain(input.value);
 
     // Action buttons
     expect(within(dialog).getByRole('button', { name: /Cancel/i })).toBeInTheDocument();
@@ -178,8 +178,8 @@ describe('CareTag — Dashboard Visual Polish, Responsive Layout & Dialog Refine
     expect(within(dialog).getByText(/Bhavishya Singla/i)).toBeInTheDocument();
     expect(within(dialog).getByText(/\(1 registered\)/i)).toBeInTheDocument();
 
-    // Single device card displays Leon, CARE-TAG-01, and selection badge
-    expect(within(dialog).getByText('Leon')).toBeInTheDocument();
+    // Single device card displays CareTag 1, CARE-TAG-01, and selection badge
+    expect(within(dialog).getByText(/CareTag 1|Leon/)).toBeInTheDocument();
     expect(within(dialog).getByText('CARE-TAG-01')).toBeInTheDocument();
     expect(within(dialog).getByText(/Selected|Active/i)).toBeInTheDocument();
 

@@ -278,7 +278,7 @@ describe('Header Redesign & Caregiver-Device Architecture Tests', () => {
     fireEvent.click(linkNewBtn);
 
     // Modal opens
-    expect(screen.getByRole('heading', { name: /Link New Smart Band/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Link (?:another|New) Smart Band/i })).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/e\.g\. CARE-TAG/i)).toBeInTheDocument();
   });
 

@@ -5,7 +5,7 @@ import {
   Radio, Clock, Layers,
   Check, Terminal, Sliders, Maximize2, Minimize2,
   Navigation, X, ChevronDown, Car, Smartphone,
-  Plus, Compass, Home
+  Plus, Compass, Home, RefreshCw
 } from 'lucide-react';
 import {
   Circle, MapContainer, Marker, Popup, TileLayer, useMap, Polyline, useMapEvents
@@ -44,11 +44,11 @@ import {
    Leaflet helpers & device icon
    ────────────────────────────────────────────────────────────── */
 
-function makeDeviceMarkerIcon({ color = '#2563EB', initial = 'L', isAnomaly = false, isOffline = false } = {}) {
+function makeDeviceMarkerIcon({ color = '#2563EB', initial = 'C', isAnomaly = false, isOffline = false } = {}) {
   const markerClass = `device-marker ${isAnomaly ? 'device-marker--alert' : isOffline ? 'device-marker--offline' : ''}`;
-  const coreBg = isAnomaly ? '#DC2626' : color;
+  const coreBg = isAnomaly ? '#DC2626' : (isOffline ? '#64748B' : color);
   const pulseHtml = isOffline ? '' : `<div class="device-marker-pulse" style="border-color:${coreBg}; background:radial-gradient(circle, ${coreBg}22 0%, ${coreBg}00 70%);"></div>`;
-  const opacity = isOffline ? '0.78' : '1.0';
+  const opacity = isOffline ? '0.85' : '1.0';
 
   return L.divIcon({
     className: '',
@@ -299,6 +299,7 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
   const [newAgeInput] = useState('8');
   const [newRelationInput, setNewRelationInput] = useState('Child');
   const [linkError, setLinkError] = useState('');
+  const [isLinkingDevice, setIsLinkingDevice] = useState(false);
 
   // Map multi-device view filter: 'selected' | 'all'
   const [mapDeviceFilter, setMapDeviceFilter] = useState('selected');
@@ -327,18 +328,18 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
   // Active Profile metadata derived from selected wearable device
   const activeProfile = devicesList.find(d => d.deviceKey === selectedDeviceKey) || devicesList[0] || {
     deviceKey: selectedDeviceKey,
-    nickname: 'Leon',
-    name: 'Leon',
-    childName: session?.childName || 'Leon',
+    nickname: 'CareTag 1',
+    name: 'CareTag 1',
+    childName: 'CareTag 1',
     relation: 'Smart Band',
     avatarColor: '#2563EB',
     hardwareModel: 'ESP32-WROOM-32U + NEO-6M',
   };
-  const activeDeviceNickname = (activeProfile.nickname && activeProfile.nickname !== 'Device 1' && !['Aarav Singla', 'Diya Singla', 'Kabir Verma'].includes(activeProfile.nickname))
+  const activeDeviceNickname = (activeProfile.nickname && activeProfile.nickname !== 'Device 1')
     ? activeProfile.nickname
-    : (activeProfile.name && activeProfile.name !== 'Device 1' && !['Aarav Singla', 'Diya Singla', 'Kabir Verma'].includes(activeProfile.name))
+    : (activeProfile.name && activeProfile.name !== 'Device 1')
     ? activeProfile.name
-    : (activeProfile.childName && !['Aarav Singla', 'Diya Singla', 'Kabir Verma', 'Device 1'].includes(activeProfile.childName) ? activeProfile.childName : 'Leon');
+    : 'CareTag 1';
   const deviceDisplayName = `${activeDeviceNickname} (${selectedDeviceKey})`;
 
   // Caregiver display identity
@@ -593,25 +594,32 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
   const handleLinkDeviceSubmit = (e) => {
     e.preventDefault();
     setLinkError('');
-    const res = deviceStore.linkNewDevice(userId, {
-      deviceKey: newDeviceKeyInput,
-      nickname: newNicknameInput || newChildNameInput,
-      name: newNicknameInput || newChildNameInput,
-      childName: newNicknameInput || newChildNameInput,
-      age: newAgeInput,
-      relation: newRelationInput,
-    });
-    if (!res.ok) {
-      setLinkError(res.error || 'Failed to link device');
-      return;
+    if (!newDeviceKeyInput.trim()) return;
+    setIsLinkingDevice(true);
+    try {
+      const res = deviceStore.linkNewDevice(userId, {
+        deviceKey: newDeviceKeyInput,
+        nickname: newNicknameInput || newChildNameInput,
+        name: newNicknameInput || newChildNameInput,
+        childName: newNicknameInput || newChildNameInput,
+        age: newAgeInput,
+        relation: newRelationInput,
+      });
+      if (!res.ok) {
+        setLinkError(res.error || 'Failed to link device');
+        setIsLinkingDevice(false);
+        return;
+      }
+      setDevicesList(res.devices);
+      handleSwitchDevice(res.device.deviceKey);
+      setShowLinkDeviceModal(false);
+      setNewDeviceKeyInput('');
+      setNewNicknameInput('');
+      setNewChildNameInput('');
+      pushToast(`Linked ${res.device.nickname || res.device.deviceKey} successfully!`, 'success');
+    } finally {
+      setIsLinkingDevice(false);
     }
-    setDevicesList(res.devices);
-    handleSwitchDevice(res.device.deviceKey);
-    setShowLinkDeviceModal(false);
-    setNewDeviceKeyInput('');
-    setNewNicknameInput('');
-    setNewChildNameInput('');
-    pushToast(`Linked ${res.device.nickname || res.device.deviceKey} successfully!`, 'success');
   };
 
   // ── Modal Background Scroll Lock & Escape Key Handler ──
@@ -1243,8 +1251,8 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
             onPointerDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => e.stopPropagation()}
           >
-            {/* Multi-device map view filter */}
-            <div className="map-view-filter-group" role="group" aria-label="Device Map Filter">
+            {/* Group 1: Device and map context */}
+            <div className="map-view-filter-group map-toolbar-context-group" role="group" aria-label="Device Map Filter">
               <button
                 type="button"
                 className={`map-toolbar-btn ${mapDeviceFilter === 'selected' ? 'map-toolbar-btn--active' : ''}`}
@@ -1273,69 +1281,72 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
               </button>
             </div>
 
-            <button
-              type="button"
-              className="map-toolbar-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (latest) {
-                  setFlyToTarget({ latlng: [latest.lat, latest.lng], timestamp: Date.now() });
-                  pushToast(`Centered map on ${activeDeviceNickname}`, 'info');
-                } else if (geofences[0]) {
-                  setFlyToTarget({ latlng: [geofences[0].centerLatitude, geofences[0].centerLongitude], timestamp: Date.now() });
-                }
-              }}
-              title={`Recenter on ${activeDeviceNickname}`}
-            >
-              <Crosshair size={15} />
-              <span className="toolbar-btn-text">Recenter</span>
-            </button>
-
-            <button
-              type="button"
-              className="map-toolbar-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (geofences.length > 0) {
-                  setFlyToTarget({ latlng: [geofences[0].centerLatitude, geofences[0].centerLongitude], zoom: 14, timestamp: Date.now() });
-                  pushToast('Fitted to safe places', 'info');
-                } else {
-                  pushToast('No safe places configured yet', 'info');
-                }
-              }}
-              title="Fit Safe Places"
-            >
-              <MapPin size={15} />
-              <span className="toolbar-btn-text">Safe Places</span>
-            </button>
-
-            {routeWaypoints.length >= 2 && (
+            {/* Group 2: Map actions */}
+            <div className="map-toolbar-actions-group" role="group" aria-label="Map Actions">
               <button
                 type="button"
-                className={`map-toolbar-btn ${showExpectedRoute ? 'map-toolbar-btn--active' : ''}`}
+                className="map-toolbar-btn"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setShowExpectedRoute(r => !r);
+                  if (latest) {
+                    setFlyToTarget({ latlng: [latest.lat, latest.lng], timestamp: Date.now() });
+                    pushToast(`Centered map on ${activeDeviceNickname}`, 'info');
+                  } else if (geofences[0]) {
+                    setFlyToTarget({ latlng: [geofences[0].centerLatitude, geofences[0].centerLongitude], timestamp: Date.now() });
+                  }
                 }}
-                title="Toggle Learned Route Corridor"
+                title={`Recenter on ${activeDeviceNickname}`}
               >
-                <Navigation size={15} />
-                <span className="toolbar-btn-text">Learned Route</span>
+                <Crosshair size={15} />
+                <span className="toolbar-btn-text">Recenter</span>
               </button>
-            )}
 
-            <button
-              type="button"
-              className="map-toolbar-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsMapExpanded(exp => !exp);
-              }}
-              title={isMapExpanded ? 'Standard Split View' : 'Expand Map'}
-            >
-              {isMapExpanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-              <span className="toolbar-btn-text">{isMapExpanded ? 'Standard' : 'Expand'}</span>
-            </button>
+              <button
+                type="button"
+                className="map-toolbar-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (geofences.length > 0) {
+                    setFlyToTarget({ latlng: [geofences[0].centerLatitude, geofences[0].centerLongitude], zoom: 14, timestamp: Date.now() });
+                    pushToast('Fitted to safe places', 'info');
+                  } else {
+                    pushToast('No safe places configured yet', 'info');
+                  }
+                }}
+                title="Fit Safe Places"
+              >
+                <MapPin size={15} />
+                <span className="toolbar-btn-text">Safe Places</span>
+              </button>
+
+              {routeWaypoints.length >= 2 && (
+                <button
+                  type="button"
+                  className={`map-toolbar-btn ${showExpectedRoute ? 'map-toolbar-btn--active' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowExpectedRoute(r => !r);
+                  }}
+                  title="Toggle Learned Route Corridor"
+                >
+                  <Navigation size={15} />
+                  <span className="toolbar-btn-text">Learned Route</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="map-toolbar-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsMapExpanded(exp => !exp);
+                }}
+                title={isMapExpanded ? 'Standard Split View' : 'Expand Map'}
+              >
+                {isMapExpanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+                <span className="toolbar-btn-text">{isMapExpanded ? 'Standard' : 'Expand'}</span>
+              </button>
+            </div>
           </div>
 
           {/* Leaflet Map Canvas */}
@@ -1485,38 +1496,41 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
             )}
 
             {/* Active Device Movement Marker with Stable Color & Initial */}
-            {latest && (
-              <Marker
-                position={[latest.lat, latest.lng]}
-                icon={makeDeviceMarkerIcon({
-                  color: activeProfile.avatarColor || '#2563EB',
-                  initial: (activeDeviceNickname.trim().charAt(0) || 'L').toUpperCase(),
-                  isAnomaly: Boolean(latest?.packet?.isAnomaly),
-                  isOffline: hardwareStatus.deviceStatus === DEVICE_STATUS.OFFLINE || hardwareStatus.deviceStatus === DEVICE_STATUS.WAITING_FOR_DATA,
-                })}
-              >
-                <Popup>
-                  <div className="map-popup-card">
-                    <div className="map-popup-header">
-                      <ShieldCheck size={14} color={activeProfile.avatarColor || '#0D9488'} />
-                      <strong>{deviceDisplayName}</strong>
+            {latest && (() => {
+              const isMarkerOffline = hardwareStatus.deviceStatus === DEVICE_STATUS.OFFLINE || hardwareStatus.deviceStatus === DEVICE_STATUS.WAITING_FOR_DATA;
+              return (
+                <Marker
+                  position={[latest.lat, latest.lng]}
+                  icon={makeDeviceMarkerIcon({
+                    color: activeProfile.avatarColor || '#2563EB',
+                    initial: (activeDeviceNickname.trim().charAt(0) || 'C').toUpperCase(),
+                    isAnomaly: Boolean(latest?.packet?.isAnomaly),
+                    isOffline: isMarkerOffline,
+                  })}
+                >
+                  <Popup>
+                    <div className="map-popup-card">
+                      <div className="map-popup-header">
+                        <ShieldCheck size={14} color={isMarkerOffline ? '#64748B' : (activeProfile.avatarColor || '#0D9488')} />
+                        <strong>{deviceDisplayName}</strong>
+                      </div>
+                      <p className="map-popup-sub">
+                        Status: {latest.packet?.motionState || 'Normal'} &bull; {isMarkerOffline ? 'Offline · Last Known Location' : (hardwareStatus.deviceStatus === DEVICE_STATUS.LIVE ? 'Live Hardware Location' : 'Delayed / Last Known')}
+                      </p>
+                      <p className="map-popup-sub">
+                        Battery: {latest.packet?.batteryPercent != null ? `${latest.packet.batteryPercent}%` : 'Waiting for battery data'} &bull; Speed: {isMarkerOffline ? '0 km/h (Offline)' : `${latest.packet?.speedKph ?? 0} km/h`}
+                      </p>
+                      <p className="map-popup-coords">
+                        {latest.lat.toFixed(5)}° N, {latest.lng.toFixed(5)}° E
+                      </p>
+                      <p className="map-popup-time">
+                        {isMarkerOffline ? 'Last updated: ' : 'Updated: '} {latest.packet?.capturedAtUtc ? new Date(latest.packet.capturedAtUtc).toLocaleTimeString() : 'Previously'}
+                      </p>
                     </div>
-                    <p className="map-popup-sub">
-                      Status: {latest.packet?.motionState || 'Normal'} &bull; {hardwareStatus.deviceStatus === DEVICE_STATUS.LIVE ? 'Live Hardware' : 'Offline / Last Known'}
-                    </p>
-                    <p className="map-popup-sub">
-                      Battery: {latest.packet?.batteryPercent != null ? `${latest.packet.batteryPercent}%` : 'Waiting for battery data'} &bull; Speed: {latest.packet?.speedKph ?? 0} km/h
-                    </p>
-                    <p className="map-popup-coords">
-                      {latest.lat.toFixed(5)}° N, {latest.lng.toFixed(5)}° E
-                    </p>
-                    <p className="map-popup-time">
-                      Updated: {new Date(latest.packet?.capturedAtUtc || Date.now()).toLocaleTimeString()}
-                    </p>
-                  </div>
-                </Popup>
-              </Marker>
-            )}
+                  </Popup>
+                </Marker>
+              );
+            })()}
           </MapContainer>
 
           {/* Compact Multi-Device Map Legend (Visible in All Devices view) */}
@@ -1581,11 +1595,11 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
             </span>
             {latest?.lat != null && latest?.lng != null ? (
               <span className="map-footer-item map-footer-coords">
-                <strong>Coordinates:</strong> {latest.lat.toFixed(4)}°N, {latest.lng.toFixed(4)}°E {latest?.packet?.gps?.valid ? '(3D Fix)' : '(Fix pending)'}
+                <strong>Coordinates:</strong> {latest.lat.toFixed(4)}°N, {latest.lng.toFixed(4)}°E {latest?.packet?.gps?.valid ? '(3D Satellite Fix)' : (hardwareStatus.deviceStatus === DEVICE_STATUS.OFFLINE ? '(Last Known Location)' : '(Waiting for GPS location)')}
               </span>
             ) : (
               <span className="map-footer-item map-footer-coords">
-                <strong>Coordinates:</strong> Location Unavailable (Waiting for GPS Fix)
+                <strong>Coordinates:</strong> {hardwareStatus.deviceStatus === DEVICE_STATUS.OFFLINE ? 'Location unavailable (Device offline)' : 'Waiting for GPS location'}
               </span>
             )}
           </footer>
@@ -1992,50 +2006,65 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
         </div>
       )}
 
-      {/* ── Link New Smart Band Modal ── */}
+      {/* ── Link another Smart Band Modal ── */}
       {showLinkDeviceModal && (
-        <div className="caretag-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="link-device-title">
-          <div className="caretag-modal-card">
+        <div
+          className="caretag-modal-overlay link-device-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Link another Smart Band"
+          aria-labelledby="link-device-title"
+          onClick={() => { setShowLinkDeviceModal(false); setLinkError(''); }}
+        >
+          <div className="caretag-modal-card link-device-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-title-wrap">
-                <Smartphone size={18} className="text-teal" />
-                <h3 id="link-device-title">Link New Smart Band</h3>
+                <Smartphone size={18} className="text-blue" />
+                <h3 id="link-device-title">Link another Smart Band</h3>
               </div>
               <button
                 type="button"
                 className="modal-close-btn"
                 onClick={() => { setShowLinkDeviceModal(false); setLinkError(''); }}
-                aria-label="Close Modal"
+                aria-label="Close dialog"
               >
                 <X size={16} />
               </button>
             </div>
-            <form onSubmit={handleLinkDeviceSubmit} className="modal-body-form">
+            <form onSubmit={handleLinkDeviceSubmit} className="modal-body-form link-device-form">
               <p className="modal-desc">
-                Register a new wearable device to this caregiver account. Each device maintains isolated real-time telemetry, location, and routine models.
+                Connect a registered device to your CareTag account.
               </p>
               {linkError && (
                 <div className="form-error-banner" role="alert">
-                  <AlertTriangle size={14} />
+                  <AlertTriangle size={15} />
                   <span>{linkError}</span>
                 </div>
               )}
               <div className="form-group">
-                <label>Device Key / Hardware Identifier *</label>
+                <label htmlFor="link-device-key-input">
+                  Device Key / Hardware Identifier <span className="text-required">*</span>
+                </label>
                 <input
+                  id="link-device-key-input"
                   type="text"
-                  placeholder="e.g. CARE-TAG-02, e.g. CARE-TAG-04 or ESP32-BAND-02"
+                  placeholder="e.g. CARE-TAG-02 or ESP32-BAND-02"
                   value={newDeviceKeyInput}
-                  onChange={e => setNewDeviceKeyInput(e.target.value.toUpperCase())}
+                  onChange={e => {
+                    setNewDeviceKeyInput(e.target.value.toUpperCase());
+                    if (linkError) setLinkError('');
+                  }}
+                  autoFocus
                   required
                 />
                 <span className="form-hint">Found on the bottom of the band or in the pairing document. Immutable hardware ID.</span>
               </div>
               <div className="form-group">
-                <label>Device Friendly Nickname</label>
+                <label htmlFor="link-device-nickname-input">Device Friendly Nickname (Optional)</label>
                 <input
+                  id="link-device-nickname-input"
                   type="text"
-                  placeholder="e.g. Secondary Band, Rover, or Leon 2"
+                  placeholder="e.g. CareTag 2 or Secondary Band"
                   value={newNicknameInput}
                   onChange={e => setNewNicknameInput(e.target.value)}
                 />
@@ -2043,8 +2072,9 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
               </div>
               <div className="form-row-2">
                 <div className="form-group">
-                  <label>Profile Label (Optional)</label>
+                  <label htmlFor="link-profile-label">Profile Label (Optional)</label>
                   <input
+                    id="link-profile-label"
                     type="text"
                     placeholder="e.g. Primary Device"
                     value={newChildNameInput}
@@ -2052,8 +2082,12 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
                   />
                 </div>
                 <div className="form-group">
-                  <label>Usage Category</label>
-                  <select value={newRelationInput} onChange={e => setNewRelationInput(e.target.value)}>
+                  <label htmlFor="link-usage-category">Usage Category</label>
+                  <select
+                    id="link-usage-category"
+                    value={newRelationInput}
+                    onChange={e => setNewRelationInput(e.target.value)}
+                  >
                     <option value="Child">Child / Youth</option>
                     <option value="Ward">Ward</option>
                     <option value="Student">Student</option>
@@ -2062,7 +2096,7 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
                   </select>
                 </div>
               </div>
-              <div className="modal-actions">
+              <div className="modal-actions link-device-actions">
                 <button
                   type="button"
                   className="btn btn-outline"
@@ -2070,9 +2104,23 @@ function Dashboard({ session, onLogout, onGoToLanding, initialTab = 'overview' }
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  <Plus size={14} />
-                  <span>Link &amp; Activate Device</span>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={!newDeviceKeyInput.trim() || isLinkingDevice}
+                  title="Link device to your CareTag account"
+                >
+                  {isLinkingDevice ? (
+                    <>
+                      <RefreshCw size={14} className="spin" />
+                      <span>Linking device...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={14} />
+                      <span>Link device</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

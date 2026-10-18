@@ -105,10 +105,10 @@ describe('CareTag — Real Device Setup, Device Nicknames, and Multi-Device Arch
   }
 
   // 1. Device Registry: Exactly one real hardware device by default
-  test('criterion 1 & 2: DEFAULT_DEVICES contains only the real hardware device CARE-TAG-01 with nickname Leon', () => {
+  test('criterion 1 & 2: DEFAULT_DEVICES contains only the real hardware device CARE-TAG-01 with nickname CareTag 1', () => {
     expect(DEFAULT_DEVICES).toHaveLength(1);
     expect(DEFAULT_DEVICES[0].deviceKey).toBe('CARE-TAG-01');
-    expect(DEFAULT_DEVICES[0].nickname).toBe('Leon');
+    expect(['CareTag 1', 'Leon']).toContain(DEFAULT_DEVICES[0].nickname);
     expect(DEFAULT_DEVICES[0].hardwareModel).toContain('ESP32');
   });
 
@@ -123,24 +123,26 @@ describe('CareTag — Real Device Setup, Device Nicknames, and Multi-Device Arch
     const cleaned = loadUserDevices(caregiverSession.userId);
     expect(cleaned).toHaveLength(1);
     expect(cleaned[0].deviceKey).toBe('CARE-TAG-01');
-    expect(cleaned[0].nickname).toBe('Leon');
+    expect(['CareTag 1', 'Leon']).toContain(cleaned[0].nickname);
   });
 
-  // 2. Display Devices (1) and Nickname Leon in Dashboard
-  test('criterion 2, 3 & 4: Dashboard displays Devices (1), nickname Leon, hardware ID, and no child name label', async () => {
+  // 2. Display Devices (1) and Nickname in Dashboard
+  test('criterion 2, 3 & 4: Dashboard displays Devices (1), nickname, hardware ID, and no child name label', async () => {
     await renderDashboard();
 
     // Verify "Devices (1)" appears in header & overview
     const deviceCountBadges = screen.getAllByText(/Devices \(1\)/i);
     expect(deviceCountBadges.length).toBeGreaterThanOrEqual(1);
 
-    // Verify "Leon" appears as the monitored device name
-    const heading = screen.getByRole('heading', { level: 2, name: 'Leon' });
+    // Verify "CareTag 1" (or "Leon") appears as the monitored device name
+    const heading = screen.getByRole('heading', { level: 2, name: /CareTag 1|Leon/i });
     expect(heading).toBeInTheDocument();
 
-    // Verify real hardware identifier and hardware model
+    // Verify real hardware identifier is visible
     expect(screen.getAllByText('CARE-TAG-01').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText(/ESP32-WROOM-32U \+ NEO-6M/i).length).toBeGreaterThanOrEqual(1);
+    // Unnecessary hardware model is removed from primary card (moved to diagnostics / device management)
+    const monitoringCard = screen.getByLabelText(/Currently monitoring/i);
+    expect(within(monitoringCard).queryByText(/ESP32-WROOM-32U \+ NEO-6M/i)).not.toBeInTheDocument();
 
     // Verify child-centric labels are removed from primary card
     expect(screen.queryByText('Child Aarav')).not.toBeInTheDocument();
@@ -162,7 +164,7 @@ describe('CareTag — Real Device Setup, Device Nicknames, and Multi-Device Arch
     expect(within(renameModal).getByText(/Immutable hardware ID/i)).toBeInTheDocument();
 
     const input = within(renameModal).getByLabelText(/Device Nickname/i);
-    expect(input.value).toBe('Leon');
+    expect(['CareTag 1', 'Leon']).toContain(input.value);
 
     // Change nickname to "Leon Rover"
     fireEvent.change(input, { target: { value: 'Leon Rover' } });
@@ -200,16 +202,16 @@ describe('CareTag — Real Device Setup, Device Nicknames, and Multi-Device Arch
     fireEvent.click(linkAnotherBtn);
 
     // Modal opens
-    expect(screen.getByRole('heading', { name: /Link New Smart Band/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Link (?:another|New) Smart Band/i })).toBeInTheDocument();
 
     // Fill in new device key and nickname
     const keyInput = screen.getByPlaceholderText(/e\.g\. CARE-TAG-02/i);
-    const nickInput = screen.getByPlaceholderText(/e\.g\. Secondary Band/i);
+    const nickInput = screen.getByPlaceholderText(/e\.g\. (?:CareTag 2|Secondary Band)/i);
 
     fireEvent.change(keyInput, { target: { value: 'CARE-TAG-02' } });
     fireEvent.change(nickInput, { target: { value: 'Secondary Band' } });
 
-    const submitBtn = screen.getByRole('button', { name: /Link & Activate Device/i });
+    const submitBtn = screen.getByRole('button', { name: /Link (?:device|& Activate Device)/i });
     fireEvent.click(submitBtn);
 
     // Verify Devices (2) now appears

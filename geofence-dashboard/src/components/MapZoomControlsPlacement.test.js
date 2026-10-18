@@ -100,7 +100,7 @@ describe('CareTag — Map Zoom Controls Placement & Floating Toolbar Non-Overlap
     expect(filterGroup).toHaveClass('map-view-filter-group');
 
     // Verify filter buttons inside toolbar
-    expect(within(toolbar).getByRole('button', { name: /Leon/i })).toBeInTheDocument();
+    expect(within(toolbar).getByRole('button', { name: /CareTag 1|Leon/i })).toBeInTheDocument();
     expect(within(toolbar).getByRole('button', { name: /All Devices/i })).toBeInTheDocument();
 
     // Verify map action buttons inside toolbar

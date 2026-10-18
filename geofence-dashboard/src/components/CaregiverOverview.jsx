@@ -77,10 +77,10 @@ export default function CaregiverOverview({
   const [isDiagnosticsExpanded, setIsDiagnosticsExpanded] = useState(false);
 
   const rawNickname = activeProfile?.nickname || activeProfile?.name || activeProfile?.childName;
-  const deviceNickname = (rawNickname && rawNickname !== 'Device 1')
+  const deviceNickname = (rawNickname && rawNickname !== 'Device 1' && !['Aarav Singla', 'Diya Singla', 'Kabir Verma'].includes(rawNickname))
     ? rawNickname
-    : 'Leon';
-  const deviceInitial = (deviceNickname.trim().charAt(0) || 'L').toUpperCase();
+    : 'CareTag 1';
+  const deviceInitial = (deviceNickname.trim().charAt(0) || 'C').toUpperCase();
   const [renameTargetKey, setRenameTargetKey] = useState(selectedDeviceKey);
   const [renameInput, setRenameInput] = useState(deviceNickname);
   const [renameError, setRenameError] = useState('');
@@ -169,42 +169,98 @@ export default function CaregiverOverview({
 
   // Physical Location logic (Honest, strictly data-driven)
   const hasValidCoordinates = Boolean(packet?.latitude != null && packet?.longitude != null);
-  const isFixFresh = hasValidCoordinates && freshness.status === 'live';
+  const isDeviceOffline = hardwareStatus?.deviceStatus === DEVICE_STATUS.OFFLINE || hardwareStatus?.deviceStatus === DEVICE_STATUS.WAITING_FOR_DATA || hardwareStatus?.connected === false;
+  const isDeviceOnline = !isDeviceOffline && (hardwareStatus?.deviceStatus === DEVICE_STATUS.LIVE || hardwareStatus?.connected === true || Boolean(isLiveHardwareMode) || Boolean(simRunning));
+  const isFixFresh = hasValidCoordinates && isDeviceOnline && (freshness.status === 'live' || (freshness.ageSeconds != null && freshness.ageSeconds < 30));
 
-  // Location display naming
-  let locationHeading = 'Last Known Location';
-  let locationTitle = 'Location Unavailable';
-  let locationSubtext = 'Waiting for a valid GPS fix';
+  // Actual elapsed time calculation from real timestamp
+  const getElapsedText = (ts) => {
+    if (!ts) return null;
+    const t = new Date(ts).getTime();
+    if (isNaN(t)) return null;
+    const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+    if (s < 10) return 'just now';
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h`;
+    const d = Math.floor(h / 24);
+    return `${d}d`;
+  };
+  const elapsedAge = getElapsedText(packet?.timestamp || packet?.capturedAtUtc) || (freshness.text?.replace(/^(Live · |Stale · |Offline · )/, '')) || hardwareStatus?.formattedAge || 'recently';
+
+  // Location display naming & status
+  let locationHeading = 'Current Location';
+  let locationTitle = 'Location unavailable';
+  let locationSubtext = 'CareTag has not received a valid location from this device yet.';
+  let locationFooterMeta = 'Location unavailable';
   let locationStatusType = 'neutral';
 
   if (!hasValidCoordinates) {
-    locationHeading = 'Location Unavailable';
-    locationTitle = 'GPS Searching';
-    locationSubtext = 'Waiting for a location fix from the Smart Band.';
-    locationStatusType = 'neutral';
-  } else {
-    locationHeading = isFixFresh ? 'Current Location' : 'Last Known Location';
-
-    if (geofences.length === 0) {
-      locationTitle = 'Patiala, Punjab';
-      locationSubtext = isFixFresh ? 'Live GPS satellite lock · No safe places configured' : `Updated ${freshness.text} · 0 safe places`;
-      locationStatusType = 'safe';
-    } else if (safety.insideZone) {
-      locationTitle = `Inside ${safety.insideZone}`;
-      locationSubtext = isFixFresh ? 'Live GPS satellite lock · Within safe boundary' : `Updated ${freshness.text}`;
-      locationStatusType = 'safe';
-    } else if (safety.status === 'outside' || safety.status === 'breach') {
-      locationTitle = 'Outside Safe Boundary';
-      locationSubtext = `${Math.round(Math.abs(safety.distanceToBoundaryKm) * 1000)}m from ${safety.nearestZone || 'safe place'}`;
-      locationStatusType = 'alert';
-    } else if (safety.status === 'deviation') {
-      locationTitle = 'Off Learned Route';
-      locationSubtext = `Departed regular transit corridor near ${safety.nearestZone || 'campus'}`;
+    if (isDeviceOffline) {
+      // State B: Offline, no location received
+      locationHeading = 'Last Known Location';
+      locationTitle = 'Waiting for a fresh location';
+      locationSubtext = 'The device is offline. Its last known location is shown below, if available.';
+      locationFooterMeta = 'Device offline · No location received';
+      locationStatusType = 'neutral';
+    } else if (isDeviceOnline) {
+      // State A: Online, attempting to acquire GPS
+      locationHeading = 'Current Location';
+      locationTitle = 'Waiting for GPS location';
+      locationSubtext = 'CareTag is waiting for the device to obtain a GPS location.';
+      locationFooterMeta = 'Awaiting satellite lock';
       locationStatusType = 'warn';
     } else {
-      locationTitle = safety.nearestZone ? `Near ${safety.nearestZone}` : 'Patiala, Punjab';
-      locationSubtext = isFixFresh ? 'Live GPS satellite lock' : `Updated ${freshness.text}`;
-      locationStatusType = 'safe';
+      // State E: Location unavailable
+      locationHeading = 'Location';
+      locationTitle = 'Location unavailable';
+      locationSubtext = 'CareTag has not received a valid location from this device yet.';
+      locationFooterMeta = 'Location unavailable';
+      locationStatusType = 'neutral';
+    }
+  } else {
+    // Valid coordinates exist
+    if (isDeviceOffline) {
+      // State B: Offline, with last known location
+      locationHeading = 'Last Known Location';
+      locationTitle = 'Waiting for a fresh location';
+      locationSubtext = 'The device is offline. Its last known location is shown below, if available.';
+      locationFooterMeta = elapsedAge === 'just now' ? 'Last updated just now' : `Last updated ${elapsedAge} ago`;
+      locationStatusType = 'neutral';
+    } else if (!isFixFresh) {
+      // State C: Online, but stale GPS fix
+      locationHeading = 'Last Known Location';
+      locationTitle = 'Location may be out of date';
+      locationSubtext = elapsedAge === 'just now'
+        ? 'The last location was received just now. Waiting for a newer update.'
+        : `The last location was received ${elapsedAge} ago. Waiting for a newer update.`;
+      locationFooterMeta = `Fix age: ${elapsedAge}${packet?.accuracyMeters ? ` · ±${Math.round(packet.accuracyMeters)}m` : ''}`;
+      locationStatusType = 'warn';
+    } else {
+      // State D: Fresh location available
+      locationHeading = 'Current Location';
+      const updatedTimeStr = elapsedAge === 'just now' ? 'Last updated just now.' : `Last updated ${elapsedAge} ago.`;
+
+      if (safety.insideZone) {
+        locationTitle = `Inside ${safety.insideZone}`;
+        locationSubtext = `${updatedTimeStr} Verified within safe boundary.`;
+        locationStatusType = 'safe';
+      } else if (safety.status === 'outside' || safety.status === 'breach') {
+        locationTitle = 'Outside Safe Boundary';
+        locationSubtext = `${updatedTimeStr} Departed boundary (${Math.round(Math.abs(safety.distanceToBoundaryKm || 0) * 1000)}m away).`;
+        locationStatusType = 'alert';
+      } else if (safety.status === 'deviation') {
+        locationTitle = 'Off Learned Route';
+        locationSubtext = `${updatedTimeStr} Outside regular transit corridor.`;
+        locationStatusType = 'warn';
+      } else {
+        locationTitle = safety.nearestZone ? `Near ${safety.nearestZone}` : 'Location updated';
+        locationSubtext = updatedTimeStr;
+        locationStatusType = 'safe';
+      }
+      locationFooterMeta = `3D Satellite Fix${packet?.accuracyMeters ? ` · ±${Math.round(packet.accuracyMeters)}m` : ' · ±4.2m'}`;
     }
   }
 
@@ -344,23 +400,15 @@ export default function CaregiverOverview({
                   <span>Rename</span>
                 </button>
               </div>
-              <p className="monitored-device-meta">
-                <strong className="device-id-mono">{selectedDeviceKey}</strong>
-                <span className="meta-bullet">&bull;</span>
-                <span className="hardware-model-val">{activeProfile?.hardwareModel || 'ESP32-WROOM-32U + NEO-6M'}</span>
-                {activeProfile?.relation && activeProfile?.relation !== 'Child' && activeProfile?.relation !== 'Smart Band' && (
-                  <>
-                    <span className="meta-bullet">&bull;</span>
-                    <span className="relation-tag">{activeProfile.relation}</span>
-                  </>
-                )}
-              </p>
-              <p className="monitored-connection-meta">
+              <div className="monitored-connection-meta">
                 <span className={`device-connection-badge status--${connectionStatusClass}`}>
                   <span className="status-indicator-dot" />
                   <span>{connectionStatusLabel}</span>
                 </span>
-              </p>
+                <span className="device-id-mono" title={`Hardware identifier: ${selectedDeviceKey}`}>
+                  {selectedDeviceKey}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -569,9 +617,7 @@ export default function CaregiverOverview({
 
           <div className="card-footer bento-card-footer">
             <span className="card-footer-meta bento-stream-tag">
-              {hasValidCoordinates
-                ? (isFixFresh ? '3D Satellite Fix' : `Fix age: ${freshness.text}`)
-                : 'GPS fix pending'}
+              {locationFooterMeta}
             </span>
             <span className="card-action-hint bento-action-hint">View on Map &rarr;</span>
           </div>
@@ -954,7 +1000,7 @@ export default function CaregiverOverview({
               <div className="diagnostics-subtext-row">
                 <span>Last verified: {connectionCheck.lastChecked || 'On dashboard load'}</span>
                 <span>Active Device: <code className="diagnostics-code">{selectedDeviceKey}</code></span>
-                <span>GPS Telemetry: {hasValidCoordinates ? `${packet?.latitude?.toFixed(4)}, ${packet?.longitude?.toFixed(4)}` : 'Fix Pending'}</span>
+                <span>GPS Telemetry: {hasValidCoordinates ? `${packet?.latitude?.toFixed(4)}, ${packet?.longitude?.toFixed(4)}` : (isDeviceOffline ? 'Offline' : 'Waiting for GPS location')}</span>
               </div>
             </div>
         </div>
@@ -1016,18 +1062,37 @@ export default function CaregiverOverview({
                   </div>
 
                   <div className="drawer-section">
-                    <label>Evidence</label>
+                    <label className="drawer-section-title">Evidence</label>
                     <ul className="drawer-evidence-list">
-                      <li>Device Identifier: <strong>{selectedDeviceKey}</strong></li>
-                      <li>Monitored Profile: <strong>{activeProfile?.childName || 'Child'}</strong></li>
-                      <li>Last Heartbeat: <strong>{hardwareStatus?.formattedAge || 'No ping received'}</strong></li>
-                      <li>Firebase Realtime Transport: <strong>{connectionCheck.firebaseOk ? `Reachable (${connectionCheck.latencyMs}ms latency)` : 'Disconnected'}</strong></li>
-                      <li>Expected Ping Interval: <strong>Every 30 seconds</strong></li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Device Identifier:</span>
+                        <strong className="drawer-evidence-value"><code className="device-id-mono">{selectedDeviceKey}</code></strong>
+                      </li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Device Nickname:</span>
+                        <strong className="drawer-evidence-value">{deviceNickname}</strong>
+                      </li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Hardware Model:</span>
+                        <strong className="drawer-evidence-value">{activeProfile?.hardwareModel || 'ESP32-WROOM-32U + NEO-6M'}</strong>
+                      </li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Last Heartbeat:</span>
+                        <strong className="drawer-evidence-value">{hardwareStatus?.formattedAge || 'No ping received'}</strong>
+                      </li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Firebase Realtime Transport:</span>
+                        <strong className="drawer-evidence-value">{connectionCheck.firebaseOk ? `Reachable (${connectionCheck.latencyMs}ms latency)` : 'Disconnected'}</strong>
+                      </li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Expected Ping Interval:</span>
+                        <strong className="drawer-evidence-value">Every 30 seconds</strong>
+                      </li>
                     </ul>
                   </div>
 
                   <div className="drawer-section">
-                    <label>Recommended Action</label>
+                    <label className="drawer-section-title">Recommended Action</label>
                     <p className="drawer-desc">
                       {devMeta.isLive
                         ? 'No action required. Telemetry is streaming normally.'
@@ -1040,7 +1105,7 @@ export default function CaregiverOverview({
                       Close
                     </button>
                     <button type="button" className="btn btn-primary" onClick={handleVerifyConnections}>
-                      <RefreshCw size={12} className={connectionCheck.testing ? 'spin' : ''} />
+                      <RefreshCw size={13} className={connectionCheck.testing ? 'spin' : ''} />
                       <span>Retest Connection</span>
                     </button>
                   </div>
@@ -1058,7 +1123,7 @@ export default function CaregiverOverview({
                   </div>
 
                   <div className="drawer-section">
-                    <label>What this means</label>
+                    <label className="drawer-section-title">What this means</label>
                     <p className="drawer-desc">
                       {isBatteryLow
                         ? 'The wearable band is below 20% capacity. It should be charged soon to prevent tracking interruptions.'
@@ -1069,17 +1134,33 @@ export default function CaregiverOverview({
                   </div>
 
                   <div className="drawer-section">
-                    <label>Evidence</label>
+                    <label className="drawer-section-title">Evidence</label>
                     <ul className="drawer-evidence-list">
-                      <li>Reported Level: <strong>{rawBattery != null ? `${rawBattery}%` : 'Waiting for battery data'}</strong></li>
-                      <li>Estimated Runtime Remaining: <strong>{rawBattery != null ? `~${Math.round(batteryLevel * 0.2)} hours` : 'Pending battery reading'}</strong></li>
-                      <li>Low Battery Warning Threshold: <strong>&lt; 20%</strong></li>
-                      <li>Critical Alarm Threshold: <strong>&lt; 15%</strong></li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Device Nickname:</span>
+                        <strong className="drawer-evidence-value">{deviceNickname}</strong>
+                      </li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Reported Level:</span>
+                        <strong className="drawer-evidence-value">{rawBattery != null ? `${rawBattery}%` : 'Waiting for battery data'}</strong>
+                      </li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Estimated Runtime Remaining:</span>
+                        <strong className="drawer-evidence-value">{rawBattery != null ? `~${Math.round(batteryLevel * 0.2)} hours` : 'Pending battery reading'}</strong>
+                      </li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Low Battery Warning Threshold:</span>
+                        <strong className="drawer-evidence-value">&lt; 20%</strong>
+                      </li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Critical Alarm Threshold:</span>
+                        <strong className="drawer-evidence-value">&lt; 15%</strong>
+                      </li>
                     </ul>
                   </div>
 
                   <div className="drawer-section">
-                    <label>Recommended Action</label>
+                    <label className="drawer-section-title">Recommended Action</label>
                     <p className="drawer-desc">
                       {isBatteryLow
                         ? 'Connect the Smart Band to its USB magnetic charging dock.'
@@ -1106,7 +1187,7 @@ export default function CaregiverOverview({
                   </div>
 
                   <div className="drawer-section">
-                    <label>What this means</label>
+                    <label className="drawer-section-title">What this means</label>
                     <p className="drawer-desc">
                       {geofences.length === 0
                         ? 'No safe places have been configured yet. Add places like Home or School to enable perimeter alerts.'
@@ -1119,23 +1200,42 @@ export default function CaregiverOverview({
                   </div>
 
                   <div className="drawer-section">
-                    <label>Evidence</label>
+                    <label className="drawer-section-title">Evidence</label>
                     <ul className="drawer-evidence-list">
-                      <li>Coordinates: <strong>{packet?.latitude ? `${packet.latitude.toFixed(6)}° N, ${packet.longitude.toFixed(6)}° E` : 'Fix unavailable'}</strong></li>
-                      <li>GPS Accuracy: <strong>{packet?.accuracyMeters ? `±${packet.accuracyMeters}m` : '±4.2m'}</strong></li>
-                      <li>Fix Freshness: <strong>{freshness.text}</strong></li>
-                      <li>Monitored Place: <strong>{safety.insideZone || safety.nearestZone || 'None'}</strong></li>
-                      <li>Configured Safe Places: <strong>{geofences.length}</strong></li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Device Nickname:</span>
+                        <strong className="drawer-evidence-value">{deviceNickname}</strong>
+                      </li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Coordinates:</span>
+                        <strong className="drawer-evidence-value">{hasValidCoordinates ? `${packet.latitude.toFixed(6)}° N, ${packet.longitude.toFixed(6)}° E` : 'Location unavailable'}</strong>
+                      </li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">GPS Accuracy:</span>
+                        <strong className="drawer-evidence-value">{hasValidCoordinates ? (packet?.accuracyMeters ? `±${Math.round(packet.accuracyMeters)}m` : '±4.2m') : 'Unavailable'}</strong>
+                      </li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Fix Freshness:</span>
+                        <strong className="drawer-evidence-value">{hasValidCoordinates ? (isFixFresh ? `Fresh (${elapsedAge})` : `Last received ${elapsedAge} ago`) : 'No coordinates available'}</strong>
+                      </li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Monitored Place:</span>
+                        <strong className="drawer-evidence-value">{safety.insideZone || safety.nearestZone || 'None'}</strong>
+                      </li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Configured Safe Places:</span>
+                        <strong className="drawer-evidence-value">{geofences.length}</strong>
+                      </li>
                     </ul>
                   </div>
 
                   <div className="drawer-section">
-                    <label>Recommended Action</label>
+                    <label className="drawer-section-title">Recommended Action</label>
                     <p className="drawer-desc">
                       {geofences.length === 0
                         ? 'Open Safe Places tab to define Home or School boundaries.'
                         : safety.status === 'outside' || safety.status === 'breach'
-                        ? 'Recenter the map to observe the child and contact their chaperone if necessary.'
+                        ? 'Recenter the map to observe the device and take necessary precautions.'
                         : 'No action required.'}
                     </p>
                   </div>
@@ -1149,7 +1249,7 @@ export default function CaregiverOverview({
                         if (onRecenterMap) onRecenterMap();
                       }}
                     >
-                      <Crosshair size={12} />
+                      <Crosshair size={13} />
                       <span>View on Map</span>
                     </button>
                     <button
@@ -1171,13 +1271,13 @@ export default function CaregiverOverview({
                 <>
                   <div className="drawer-state-row">
                     <span className="drawer-label">Current State:</span>
-                    <strong className={`drawer-val-badge ${hasRoutineLearned ? 'badge--live' : 'badge--stale'}`}>
+                    <strong className={`drawer-val-badge ${hasRoutineLearned ? 'badge--live' : recordedDaysCount > 0 ? 'badge--stale' : 'badge--stale'}`}>
                       {hasRoutineLearned ? 'Routine Learned' : recordedDaysCount > 0 ? 'Learning Routine' : 'Insufficient Data'}
                     </strong>
                   </div>
 
                   <div className="drawer-section">
-                    <label>What this means</label>
+                    <label className="drawer-section-title">What this means</label>
                     <p className="drawer-desc">
                       {hasRoutineLearned
                         ? 'CareTag automatically learned their regular daily schedule over past history. Today’s movement adheres to their normal commute corridor.'
@@ -1186,18 +1286,37 @@ export default function CaregiverOverview({
                   </div>
 
                   <div className="drawer-section">
-                    <label>Evidence</label>
+                    <label className="drawer-section-title">Evidence</label>
                     <ul className="drawer-evidence-list">
-                      <li>Observation Days Recorded: <strong>{recordedDaysCount} / 3 days required</strong></li>
-                      <li>Primary Corridor: <strong>{primaryRouteName}</strong></li>
-                      <li>Corridor Tolerance: <strong>&plusmn;350m lateral corridor</strong></li>
-                      <li>Departure Window: <strong>{profile?.primaryRoute?.departureWindow || '07:40 – 08:00 AM'}</strong></li>
-                      <li>Arrival Window: <strong>{profile?.primaryRoute?.arrivalWindow || '08:10 – 08:30 AM'}</strong></li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Device Nickname:</span>
+                        <strong className="drawer-evidence-value">{deviceNickname}</strong>
+                      </li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Observation Days Recorded:</span>
+                        <strong className="drawer-evidence-value">{recordedDaysCount} / 3 days required</strong>
+                      </li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Primary Corridor:</span>
+                        <strong className="drawer-evidence-value">{primaryRouteName}</strong>
+                      </li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Corridor Tolerance:</span>
+                        <strong className="drawer-evidence-value">&plusmn;350m lateral corridor</strong>
+                      </li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Departure Window:</span>
+                        <strong className="drawer-evidence-value">{profile?.primaryRoute?.departureWindow || '07:40 – 08:00 AM'}</strong>
+                      </li>
+                      <li className="drawer-evidence-item">
+                        <span className="drawer-evidence-label">Arrival Window:</span>
+                        <strong className="drawer-evidence-value">{profile?.primaryRoute?.arrivalWindow || '08:10 – 08:30 AM'}</strong>
+                      </li>
                     </ul>
                   </div>
 
                   <div className="drawer-section">
-                    <label>Recommended Action</label>
+                    <label className="drawer-section-title">Recommended Action</label>
                     <p className="drawer-desc">
                       {hasRoutineLearned
                         ? 'Routine model is active. Deviations exceeding 350m from the corridor will trigger an alert.'
@@ -1397,8 +1516,8 @@ export default function CaregiverOverview({
                     const rawDevNick = dev.nickname || dev.name || dev.childName;
                     const devNick = (rawDevNick && rawDevNick !== 'Device 1')
                       ? rawDevNick
-                      : 'Leon';
-                    const devInitial = (devNick.trim().charAt(0) || 'L').toUpperCase();
+                      : 'CareTag 1';
+                    const devInitial = (devNick.trim().charAt(0) || 'C').toUpperCase();
 
                     return (
                       <div className="manage-dev-card is-selected">
@@ -1443,8 +1562,8 @@ export default function CaregiverOverview({
                     const rawDevNick = dev.nickname || dev.name || dev.childName;
                     const devNick = (rawDevNick && rawDevNick !== 'Device 1')
                       ? rawDevNick
-                      : (dev.deviceKey === 'CARE-TAG-01' ? 'Leon' : dev.deviceKey);
-                    const devInitial = (devNick.trim().charAt(0) || 'L').toUpperCase();
+                      : (dev.deviceKey === 'CARE-TAG-01' ? 'CareTag 1' : dev.deviceKey);
+                    const devInitial = (devNick.trim().charAt(0) || 'C').toUpperCase();
                     const statusTag = isCurrent
                       ? connectionStatusClass
                       : 'badge--offline';
@@ -1566,6 +1685,7 @@ export default function CaregiverOverview({
           className="caretag-modal-overlay rename-device-overlay"
           role="dialog"
           aria-modal="true"
+          aria-label="Rename Device"
           aria-labelledby="rename-device-modal-title"
           onClick={() => setShowRenameModal(false)}
         >
@@ -1632,7 +1752,7 @@ export default function CaregiverOverview({
                     setRenameInput(e.target.value);
                     if (renameError) setRenameError('');
                   }}
-                  placeholder="e.g. Leon"
+                  placeholder="e.g. CareTag 1"
                   maxLength={32}
                   autoFocus
                   required

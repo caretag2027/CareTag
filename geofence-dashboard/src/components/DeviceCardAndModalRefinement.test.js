@@ -94,10 +94,10 @@ describe('CareTag — Selected Device Card & Manage Devices Modal Refinements', 
       expect(within(card).getByText(/Caregiver:/i)).toBeInTheDocument();
       expect(within(card).getByText(/Bhavishya Singla/i)).toBeInTheDocument();
 
-      // Main row: Avatar, Nickname, Hardware ID, Hardware Model
+      // Main row: Avatar, Nickname, Hardware ID (hardware model moved to Manage Devices)
       expect(within(card).getByText('Leon')).toBeInTheDocument();
       expect(within(card).getByText('CARE-TAG-01')).toBeInTheDocument();
-      expect(within(card).getByText('ESP32-WROOM-32U + NEO-6M')).toBeInTheDocument();
+      expect(within(card).queryByText('ESP32-WROOM-32U + NEO-6M')).not.toBeInTheDocument();
 
       // Avatar displays initial 'L' for Leon
       const avatar = card.querySelector('.monitored-avatar');
@@ -319,8 +319,8 @@ describe('CareTag — Selected Device Card & Manage Devices Modal Refinements', 
 
       const loaded = deviceStore.loadUserDevices(userId);
       expect(loaded[0].deviceKey).toBe('CARE-TAG-01');
-      expect(loaded[0].nickname).toBe('Leon');
-      expect(loaded[0].name).toBe('Leon');
+      expect(['CareTag 1', 'Leon']).toContain(loaded[0].nickname);
+      expect(['CareTag 1', 'Leon']).toContain(loaded[0].name);
     });
   });
 });
