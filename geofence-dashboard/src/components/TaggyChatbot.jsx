@@ -66,7 +66,7 @@ PRODUCT OVERVIEW FOR PROSPECTIVE CAREGIVERS & JUDGES:
 - Key Advantage: Dual-check routine intelligence. Unlike standard GPS trackers that only alert on static circles, CareTag learns habitual daily transit corridors and stay-points across 48 daily 30-minute intervals. It suppresses false alarms from GPS drift (45m spatial hysteresis, temporal smoothing) and catches abnormal deviations early.
 - Battery Life: 18–24 hours with dynamic sleep scheduling (sleeps during static dwell times, wakes on movement).
 - Privacy: TLS encrypted end-to-end telemetry, private isolated accounts, zero third-party tracking.
-- Team: Kinjal, Guneev Taneja, Bhavishya Singla, Manya Sharma, Anureet (Mentored by Dr. Kapil Tomar & Dr. Ravindra Kumar).
+- Team: Bhavishya Singla, Manya Sharma, Kinjal, Guneev Taneja, Anureet (Mentored by Dr. Kapil Tomar & Dr. Ravindra Kumar).
 
 RESPONSE GUIDELINES:
 - Keep answers concise, clear, and welcoming (strictly 40 to 80 words).
@@ -482,7 +482,7 @@ function getDomainOfflineAnswer(query = '', appState = {}) {
   // Team & Authors & University
   if (/(team|who\s+(made|built|created|designed|developed)|authors|mentor|teacher|faculty|guide|kapil|tomar|ravindra|ravinder|kumar|thapar|bhavishya|guneev|kinjal|manya|anureet)/i.test(q)) {
     return `CareTag was developed as a university capstone project at **Thapar Institute of Engineering & Technology** (Batch of 2027) by:
-- **Core Team:** Kinjal, Guneev Taneja, Bhavishya Singla, Manya Sharma, and Anureet.
+- **Core Team:** Bhavishya Singla, Manya Sharma, Kinjal, Guneev Taneja, and Anureet.
 - **Faculty Mentors:** Dr. Kapil Tomar and Dr. Ravindra Kumar (Associate Professors, CSED).
 
 The team combined low-power IoT hardware engineering with machine learning routine monitoring to create an accessible, caregiver-focused safety wearable.`;

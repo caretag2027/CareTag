@@ -51,6 +51,14 @@ const teamMembers = [
   },
   {
     id: 3,
+    name: 'Kinjal',
+    initials: 'KS',
+    role: 'Computer Engineering',
+    image: kinjalImg,
+    linkedin: 'https://www.linkedin.com/in/kinjal-tiet/',
+  },
+  {
+    id: 4,
     name: 'Guneev Taneja',
     initials: 'GT',
     role: 'Computer Engineering',
@@ -58,20 +66,12 @@ const teamMembers = [
     linkedin: 'https://www.linkedin.com/in/guneev-taneja-97b7a11aa/',
   },
   {
-    id: 4,
+    id: 5,
     name: 'Anureet',
     initials: 'AN',
     role: 'Computer Engineering',
     image: anureetImg,
     linkedin: 'https://www.linkedin.com/in/anureet-sokhal/',
-  },
-  {
-    id: 5,
-    name: 'Kinjal',
-    initials: 'KS',
-    role: 'Computer Engineering',
-    image: kinjalImg,
-    linkedin: 'https://www.linkedin.com/in/kinjal-tiet/',
   },
 ];
 
