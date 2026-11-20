@@ -149,8 +149,11 @@ export function parseHardwareTelemetry(raw, lastValidGps = null, context = {}) {
 
   // 3. GPS extraction & validation
   const gps = raw?.gps || {};
-  const rawLat = gps.latitude != null ? Number(gps.latitude) : null;
-  const rawLon = gps.longitude != null ? Number(gps.longitude) : null;
+  // Accept common firmware field spellings (latitude/lat, longitude/lng/lon), nested or top-level
+  const latSrc = gps.latitude ?? gps.lat ?? raw?.latitude ?? raw?.lat;
+  const lonSrc = gps.longitude ?? gps.lng ?? gps.lon ?? raw?.longitude ?? raw?.lng ?? raw?.lon;
+  const rawLat = latSrc != null && latSrc !== '' ? Number(latSrc) : null;
+  const rawLon = lonSrc != null && lonSrc !== '' ? Number(lonSrc) : null;
   const satellites = Number(gps.satellites ?? 0);
   const rawValidFlag = gps.valid !== false && gps.valid !== 'false';
   const hasValidFix = isValidGpsCoordinate(rawLat, rawLon, rawValidFlag);
@@ -634,9 +637,10 @@ export function subscribeHardwareTelemetry(onPacket, onStatusChange, options = {
       if (!isMounted) return;
       try {
         // Try Cloudflare Worker edge endpoint
+        // (Locally this path serves index.html, so a JSON parse failure must fall through to REST.)
         let res = await fetch('/api/hardware/telemetry', { cache: 'no-store' }).catch(() => null);
         if (res && res.ok) {
-          const json = await res.json();
+          const json = await res.json().catch(() => null);
           if (json?.data) {
             firebaseConnected = true;
             transportStatus = 'connected';
