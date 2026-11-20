@@ -84,6 +84,21 @@ describe('Live band', () => {
     expect(alertStore.loadAlerts('usr_test')).toHaveLength(0);
   });
 
+  test('GPS module silent → banner says "GPS module not responding"', async () => {
+    await renderDashboard();
+    bandOnline();
+    act(() => sendPacket({ gps: { valid: false, satellitesReported: 0, chars: 0 } }));
+    expect(banner()).toHaveTextContent('GPS module not responding');
+  });
+
+  test('searching for satellites → banner shows the count', async () => {
+    await renderDashboard();
+    bandOnline();
+    act(() => sendPacket({ gps: { valid: false, satellitesReported: 2, chars: 4000 } }));
+    expect(banner()).toHaveTextContent('Waiting for GPS');
+    expect(banner()).toHaveTextContent('2 found, needs 4');
+  });
+
   test('child inside Home → "Safe — inside Home"', async () => {
     await renderDashboard();
     bandOnline();

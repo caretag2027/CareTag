@@ -27,3 +27,16 @@ test('accepts lat/lng and lon field spellings from firmware', () => {
   const b = parseHardwareTelemetry({ ...base, gps: { valid: true, lat: '30.36', lon: '76.42' } });
   expect(b.longitude).toBeCloseTo(76.42);
 });
+
+test('reads GPS diagnostics (satellites, chars) when the band sends them', () => {
+  const p = parseHardwareTelemetry({ ...base, gps: { valid: false, satellites: 3, chars: 1200, hdop: 2.4 } });
+  expect(p.gps.satellitesReported).toBe(3);
+  expect(p.gps.chars).toBe(1200);
+  expect(p.gps.hdop).toBe(2.4);
+});
+
+test('GPS diagnostics are null when the band does not send them', () => {
+  const p = parseHardwareTelemetry({ ...base, gps: { valid: false } });
+  expect(p.gps.satellitesReported).toBeNull();
+  expect(p.gps.chars).toBeNull();
+});

@@ -1,7 +1,7 @@
 /**
  * Safety logic tests — "is the child inside a safe place, and when do we alert?"
  */
-import { checkPosition, createAlertMonitor, distanceMeters, getStatus, GPS_WOBBLE_METERS } from './safety';
+import { checkPosition, createAlertMonitor, distanceMeters, explainNoGps, getStatus, GPS_WOBBLE_METERS } from './safety';
 
 // A 100 m safe place called Home, plus a helper to make points N metres east of it.
 const HOME = { id: 'home', label: 'Home', centerLatitude: 30.3532, centerLongitude: 76.3713, radiusMeters: 100 };
@@ -128,5 +128,36 @@ describe('createAlertMonitor — when to alert', () => {
 
   test('first reading already outside → alert straight away', () => {
     expect(run([300]).map((e) => e.type)).toEqual(['left']);
+  });
+});
+
+describe('explainNoGps — why there is no location', () => {
+  test('GPS module sends no bytes → "not responding", with wiring hint', () => {
+    const r = explainNoGps({ satellitesReported: 0, chars: 0 });
+    expect(r.reason).toBe('module_silent');
+    expect(r.detail).toMatch(/GPIO 16/);
+  });
+
+  test('module talking but too few satellites → shows the count', () => {
+    const r = explainNoGps({ satellitesReported: 2, chars: 5400 });
+    expect(r.reason).toBe('searching');
+    expect(r.detail).toMatch(/2 found, needs 4/);
+  });
+
+  test('band sends no diagnostics → says the cause is unknown', () => {
+    expect(explainNoGps({ satellitesReported: null, chars: null }).reason).toBe('unknown');
+    expect(explainNoGps().reason).toBe('unknown');
+  });
+
+  test('banner title changes when the module is silent', () => {
+    const s = getStatus({ bandOnline: true, hasGps: false, position: null, zones: [HOME], gpsInfo: { chars: 0 } });
+    expect(s.kind).toBe('no_gps');
+    expect(s.title).toBe('GPS module not responding');
+  });
+
+  test('banner shows satellite count while searching', () => {
+    const s = getStatus({ bandOnline: true, hasGps: false, position: null, zones: [HOME], gpsInfo: { satellitesReported: 3, chars: 900 } });
+    expect(s.title).toBe('Waiting for GPS');
+    expect(s.detail).toMatch(/3 found/);
   });
 });

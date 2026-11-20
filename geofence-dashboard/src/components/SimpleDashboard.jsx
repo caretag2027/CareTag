@@ -254,6 +254,10 @@ export default function SimpleDashboard({ session, onLogout, onGoToLanding }) {
           ...prev,
           hasGps,
           position: position || prev.position,
+          gpsInfo: {
+            satellitesReported: packet.gps?.satellitesReported ?? null,
+            chars: packet.gps?.chars ?? null,
+          },
         }));
         if (position) {
           setTrail((prev) => {
@@ -349,6 +353,7 @@ export default function SimpleDashboard({ session, onLogout, onGoToLanding }) {
         hasGps: live.hasGps,
         position: live.position,
         zones,
+        gpsInfo: live.gpsInfo,
       };
 
   const status = getStatus({
@@ -356,6 +361,7 @@ export default function SimpleDashboard({ session, onLogout, onGoToLanding }) {
     hasGps: shown.hasGps,
     position: shown.position,
     zones: shown.zones,
+    gpsInfo: shown.gpsInfo,
   });
   const markerKind = shown.hasGps ? status.kind : "no_gps";
   const unseen = alerts.filter((a) => a.kind === "left" && !a.seen).length;

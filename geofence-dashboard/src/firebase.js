@@ -154,7 +154,12 @@ export function parseHardwareTelemetry(raw, lastValidGps = null, context = {}) {
   const lonSrc = gps.longitude ?? gps.lng ?? gps.lon ?? raw?.longitude ?? raw?.lng ?? raw?.lon;
   const rawLat = latSrc != null && latSrc !== '' ? Number(latSrc) : null;
   const rawLon = lonSrc != null && lonSrc !== '' ? Number(lonSrc) : null;
-  const satellites = Number(gps.satellites ?? 0);
+  const satellites = Number(gps.satellites ?? gps.sats ?? 0);
+  // Optional GPS diagnostics from firmware (null when the band doesn't send them)
+  const numOrNull = (v) => (v == null || v === '' || isNaN(Number(v)) ? null : Number(v));
+  const gpsSatellitesReported = numOrNull(gps.satellites ?? gps.sats);
+  const gpsChars = numOrNull(gps.chars ?? gps.charsProcessed ?? gps.chars_processed);
+  const gpsHdop = numOrNull(gps.hdop);
   const rawValidFlag = gps.valid !== false && gps.valid !== 'false';
   const hasValidFix = isValidGpsCoordinate(rawLat, rawLon, rawValidFlag);
 
@@ -234,6 +239,10 @@ export function parseHardwareTelemetry(raw, lastValidGps = null, context = {}) {
       rawValid: rawValidFlag,
       satellites,
       isEstimated: isGpsEstimated,
+      // Diagnostics: null means "the band did not report this"
+      satellitesReported: gpsSatellitesReported,
+      chars: gpsChars,
+      hdop: gpsHdop,
     },
 
     // Detailed IMU telemetry

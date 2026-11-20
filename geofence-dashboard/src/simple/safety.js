@@ -68,6 +68,41 @@ export function checkPosition(position, zones, wobbleMeters = GPS_WOBBLE_METERS)
   };
 }
 
+/** Satellites a GPS needs for a position fix. */
+export const MIN_SATELLITES = 4;
+
+/**
+ * Explains, in plain words, why there is no GPS position yet.
+ * Uses optional diagnostics the band may send: gps.satellites and gps.chars
+ * (bytes received from the GPS module). Missing values are treated as unknown.
+ *
+ * @param {{ satellitesReported?: number|null, chars?: number|null }} [gps]
+ * @returns {{ reason: 'module_silent'|'searching'|'unknown', detail: string }}
+ */
+export function explainNoGps(gps = {}) {
+  const sats = gps?.satellitesReported;
+  const chars = gps?.chars;
+
+  if (chars === 0) {
+    return {
+      reason: 'module_silent',
+      detail:
+        'The GPS module is not sending any data to the band. Check its wiring (GPS TX → GPIO 16, GPS RX → GPIO 17), power and baud rate (9600).',
+    };
+  }
+  if (sats != null) {
+    return {
+      reason: 'searching',
+      detail: `Searching for satellites — ${sats} found, needs ${MIN_SATELLITES}. Keep the band still under open sky; the first fix can take 5–15 minutes.`,
+    };
+  }
+  return {
+    reason: 'unknown',
+    detail:
+      'The band is connected but has no location yet. Keep it under open sky for up to 15 minutes. (The band does not report satellite count, so the cause can’t be shown.)',
+  };
+}
+
 /**
  * One status for the big banner at the top of the dashboard.
  *
@@ -76,9 +111,10 @@ export function checkPosition(position, zones, wobbleMeters = GPS_WOBBLE_METERS)
  * @param {boolean} p.hasGps      latest reading has a real GPS fix
  * @param {object|null} p.position { lat, lng }
  * @param {Array} p.zones
+ * @param {object} [p.gpsInfo] optional { satellitesReported, chars } from the band
  * @returns {{ kind: 'no_zones'|'offline'|'no_gps'|'safe'|'outside', title: string, detail: string, check: object|null }}
  */
-export function getStatus({ bandOnline, hasGps, position, zones }) {
+export function getStatus({ bandOnline, hasGps, position, zones, gpsInfo }) {
   const activeZones = (zones || []).filter(isZoneOn);
 
   if (activeZones.length === 0) {
@@ -100,8 +136,8 @@ export function getStatus({ bandOnline, hasGps, position, zones }) {
   if (!hasGps || !position) {
     return {
       kind: 'no_gps',
-      title: 'Waiting for GPS',
-      detail: 'The band is connected but has no location yet. Move outdoors with a clear view of the sky.',
+      title: explainNoGps(gpsInfo).reason === 'module_silent' ? 'GPS module not responding' : 'Waiting for GPS',
+      detail: explainNoGps(gpsInfo).detail,
       check: null,
     };
   }
