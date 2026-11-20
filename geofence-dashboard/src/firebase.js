@@ -645,36 +645,33 @@ export function subscribeHardwareTelemetry(onPacket, onStatusChange, options = {
     async function poll() {
       if (!isMounted) return;
       try {
-        // Try Cloudflare Worker edge endpoint
-        // (Locally this path serves index.html, so a JSON parse failure must fall through to REST.)
-        let res = await fetch('/api/hardware/telemetry', { cache: 'no-store' }).catch(() => null);
-        if (res && res.ok) {
-          const json = await res.json().catch(() => null);
-          if (json?.data) {
-            firebaseConnected = true;
-            transportStatus = 'connected';
-            handleData(json.raw || json.data, 'worker_edge');
-            return;
-          }
-        }
-
-        // Direct Firebase REST endpoint
+        // 1. Read the band's data straight from Firebase (always the freshest source).
         const restPath = options.path || (options.deviceKey && options.deviceKey !== 'CARE-TAG-01' ? `devices/${options.deviceKey}/sensorData` : 'sensorData');
         const restUrl = `${FIREBASE_CONFIG.databaseURL}/${restPath}.json`;
-        res = await fetch(restUrl, { cache: 'no-store' });
+        let res = await fetch(restUrl, { cache: 'no-store' }).catch(() => null);
         if (res && res.ok) {
-          const raw = await res.json();
-          if (raw) {
-            firebaseConnected = true;
-            transportStatus = 'connected';
-            handleData(raw, 'rest_polling');
-          }
-        } else {
-          firebaseConnected = false;
-          transportStatus = 'disconnected';
-          deviceStatus = DEVICE_STATUS.CONNECTION_ERROR;
-          emitStatus();
+          const raw = await res.json().catch(() => null);
+          firebaseConnected = true;
+          transportStatus = 'connected';
+          if (raw) handleData(raw, 'rest_polling');
+          return;
         }
+
+        // 2. Fallback: the Cloudflare Worker proxy, only when it returns a fresh raw reading.
+        //    (A `cached` reply is old data and would make a live band look offline.)
+        res = await fetch('/api/hardware/telemetry', { cache: 'no-store' }).catch(() => null);
+        const json = res && res.ok ? await res.json().catch(() => null) : null;
+        if (json?.raw && !json.cached) {
+          firebaseConnected = true;
+          transportStatus = 'connected';
+          handleData(json.raw, 'worker_edge');
+          return;
+        }
+
+        firebaseConnected = false;
+        transportStatus = 'disconnected';
+        deviceStatus = DEVICE_STATUS.CONNECTION_ERROR;
+        emitStatus();
       } catch (pollErr) {
         if (isMounted) {
           firebaseConnected = false;
@@ -686,7 +683,7 @@ export function subscribeHardwareTelemetry(onPacket, onStatusChange, options = {
     }
 
     poll();
-    pollIntervalId = setInterval(poll, 4000);
+    pollIntervalId = setInterval(poll, 3000);
   }
 
   // Start 1-second status state machine ticker
