@@ -9,6 +9,10 @@
  * - Static Assets Fallback for React Single Page Application
  */
 
+// In-memory band tracker (per Worker instance) and KV write throttle.
+const HW_MEMORY = { tracker: null, lastKvWriteAt: 0 };
+const HW_KV_WRITE_INTERVAL_MS = 10 * 60 * 1000;
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
@@ -447,7 +451,7 @@ export default {
           try {
             const fbRes = await fetch(`${dbUrl.replace(/\/$/, '')}/sensorData.json`, {
               headers: { 'Accept': 'application/json' },
-              cf: { cacheTtl: 1 }
+              cf: { cacheTtl: 0, cacheEverything: false }
             });
 
             if (!fbRes.ok) {
@@ -489,12 +493,14 @@ export default {
             const currentUptime = Number(raw?.uptime_ms ?? -1);
             const currentHash = `${currentUptime}_${ax}_${ay}_${az}_${gx}_${gy}_${gz}_${gpsLat}_${gpsLon}`;
 
-            let tracker = null;
-            if (env.CARETAG_KV) {
-              const trackerRaw = await env.CARETAG_KV.get('hardware:tracker');
-              if (trackerRaw) {
-                try { tracker = JSON.parse(trackerRaw); } catch (_) {}
-              }
+            // Tracker lives in memory; KV is only a cold-start backup (free-plan KV
+            // allows ~1,000 writes/day, so writing on every poll exhausted it).
+            let tracker = HW_MEMORY.tracker;
+            if (!tracker && env.CARETAG_KV) {
+              try {
+                const trackerRaw = await env.CARETAG_KV.get('hardware:tracker');
+                if (trackerRaw) tracker = JSON.parse(trackerRaw);
+              } catch (_) {}
             }
 
             // Check if hardware provided explicit timestamp
@@ -587,19 +593,23 @@ export default {
               deviationScore: isPotentialFall ? 0.95 : isMoving ? 0.35 : 0.08,
             };
 
-            // Update KV tracker & cached packet
-            if (env.CARETAG_KV) {
-              const updatedTracker = {
-                lastUptime: currentUptime,
-                lastSensorHash: currentHash,
-                lastVerifiedAt,
-                capturedAtUtc,
-                firstSeenAt: tracker?.firstSeenAt || Date.now(),
-                isStatic
-              };
-              await env.CARETAG_KV.put('hardware:tracker', JSON.stringify(updatedTracker), { expirationTtl: 86400 * 7 });
-              await env.CARETAG_KV.put('packet:SMART-BAND-01', JSON.stringify(normalizedPacket), { expirationTtl: 86400 });
-              await env.CARETAG_KV.put('hardware:latest', JSON.stringify(normalizedPacket), { expirationTtl: 86400 });
+            // Update tracker in memory; persist to KV at most every 10 minutes and never
+            // let a KV failure (e.g. daily write limit) break this response.
+            HW_MEMORY.tracker = {
+              lastUptime: currentUptime,
+              lastSensorHash: currentHash,
+              lastVerifiedAt,
+              capturedAtUtc,
+              firstSeenAt: tracker?.firstSeenAt || Date.now(),
+              isStatic
+            };
+            if (env.CARETAG_KV && Date.now() - HW_MEMORY.lastKvWriteAt > HW_KV_WRITE_INTERVAL_MS) {
+              HW_MEMORY.lastKvWriteAt = Date.now();
+              const writes = Promise.all([
+                env.CARETAG_KV.put('hardware:tracker', JSON.stringify(HW_MEMORY.tracker), { expirationTtl: 86400 * 7 }),
+                env.CARETAG_KV.put('hardware:latest', JSON.stringify(normalizedPacket), { expirationTtl: 86400 }),
+              ]).catch(() => {});
+              if (ctx && ctx.waitUntil) ctx.waitUntil(writes);
             }
 
             return json({ ok: true, data: normalizedPacket, raw });

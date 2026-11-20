@@ -251,7 +251,7 @@ export default function CaregiverOverview({
         locationTitle = 'Outside Safe Boundary';
         locationSubtext = `${updatedTimeStr} Departed boundary (${Math.round(Math.abs(safety.distanceToBoundaryKm || 0) * 1000)}m away).`;
         locationStatusType = 'alert';
-      } else if (safety.status === 'deviation') {
+      } else if (safety.status === 'deviation' || safety.status === 'warning') {
         locationTitle = 'Off Learned Route';
         locationSubtext = `${updatedTimeStr} Outside regular transit corridor.`;
         locationStatusType = 'warn';

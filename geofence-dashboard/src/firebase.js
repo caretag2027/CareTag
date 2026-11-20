@@ -149,9 +149,17 @@ export function parseHardwareTelemetry(raw, lastValidGps = null, context = {}) {
 
   // 3. GPS extraction & validation
   const gps = raw?.gps || {};
-  const rawLat = gps.latitude != null ? Number(gps.latitude) : null;
-  const rawLon = gps.longitude != null ? Number(gps.longitude) : null;
-  const satellites = Number(gps.satellites ?? 0);
+  // Accept common firmware field spellings (latitude/lat, longitude/lng/lon), nested or top-level
+  const latSrc = gps.latitude ?? gps.lat ?? raw?.latitude ?? raw?.lat;
+  const lonSrc = gps.longitude ?? gps.lng ?? gps.lon ?? raw?.longitude ?? raw?.lng ?? raw?.lon;
+  const rawLat = latSrc != null && latSrc !== '' ? Number(latSrc) : null;
+  const rawLon = lonSrc != null && lonSrc !== '' ? Number(lonSrc) : null;
+  const satellites = Number(gps.satellites ?? gps.sats ?? 0);
+  // Optional GPS diagnostics from firmware (null when the band doesn't send them)
+  const numOrNull = (v) => (v == null || v === '' || isNaN(Number(v)) ? null : Number(v));
+  const gpsSatellitesReported = numOrNull(gps.satellites ?? gps.sats);
+  const gpsChars = numOrNull(gps.chars ?? gps.charsProcessed ?? gps.chars_processed);
+  const gpsHdop = numOrNull(gps.hdop);
   const rawValidFlag = gps.valid !== false && gps.valid !== 'false';
   const hasValidFix = isValidGpsCoordinate(rawLat, rawLon, rawValidFlag);
 
@@ -231,6 +239,10 @@ export function parseHardwareTelemetry(raw, lastValidGps = null, context = {}) {
       rawValid: rawValidFlag,
       satellites,
       isEstimated: isGpsEstimated,
+      // Diagnostics: null means "the band did not report this"
+      satellitesReported: gpsSatellitesReported,
+      chars: gpsChars,
+      hdop: gpsHdop,
     },
 
     // Detailed IMU telemetry
@@ -633,35 +645,33 @@ export function subscribeHardwareTelemetry(onPacket, onStatusChange, options = {
     async function poll() {
       if (!isMounted) return;
       try {
-        // Try Cloudflare Worker edge endpoint
-        let res = await fetch('/api/hardware/telemetry', { cache: 'no-store' }).catch(() => null);
-        if (res && res.ok) {
-          const json = await res.json();
-          if (json?.data) {
-            firebaseConnected = true;
-            transportStatus = 'connected';
-            handleData(json.raw || json.data, 'worker_edge');
-            return;
-          }
-        }
-
-        // Direct Firebase REST endpoint
+        // 1. Read the band's data straight from Firebase (always the freshest source).
         const restPath = options.path || (options.deviceKey && options.deviceKey !== 'CARE-TAG-01' ? `devices/${options.deviceKey}/sensorData` : 'sensorData');
         const restUrl = `${FIREBASE_CONFIG.databaseURL}/${restPath}.json`;
-        res = await fetch(restUrl, { cache: 'no-store' });
+        let res = await fetch(restUrl, { cache: 'no-store' }).catch(() => null);
         if (res && res.ok) {
-          const raw = await res.json();
-          if (raw) {
-            firebaseConnected = true;
-            transportStatus = 'connected';
-            handleData(raw, 'rest_polling');
-          }
-        } else {
-          firebaseConnected = false;
-          transportStatus = 'disconnected';
-          deviceStatus = DEVICE_STATUS.CONNECTION_ERROR;
-          emitStatus();
+          const raw = await res.json().catch(() => null);
+          firebaseConnected = true;
+          transportStatus = 'connected';
+          if (raw) handleData(raw, 'rest_polling');
+          return;
         }
+
+        // 2. Fallback: the Cloudflare Worker proxy, only when it returns a fresh raw reading.
+        //    (A `cached` reply is old data and would make a live band look offline.)
+        res = await fetch('/api/hardware/telemetry', { cache: 'no-store' }).catch(() => null);
+        const json = res && res.ok ? await res.json().catch(() => null) : null;
+        if (json?.raw && !json.cached) {
+          firebaseConnected = true;
+          transportStatus = 'connected';
+          handleData(json.raw, 'worker_edge');
+          return;
+        }
+
+        firebaseConnected = false;
+        transportStatus = 'disconnected';
+        deviceStatus = DEVICE_STATUS.CONNECTION_ERROR;
+        emitStatus();
       } catch (pollErr) {
         if (isMounted) {
           firebaseConnected = false;
@@ -673,7 +683,7 @@ export function subscribeHardwareTelemetry(onPacket, onStatusChange, options = {
     }
 
     poll();
-    pollIntervalId = setInterval(poll, 4000);
+    pollIntervalId = setInterval(poll, 3000);
   }
 
   // Start 1-second status state machine ticker
